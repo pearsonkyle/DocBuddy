@@ -3616,6 +3616,855 @@
     };
   }
 
+  // ── Synthesizer storage helpers ──────────────────────────────────────────────
+  var SYNTH_STORAGE_KEY = 'docbuddy-synthesizer';
+
+  function loadSynthSettings() {
+    try {
+      var data = localStorage.getItem(SYNTH_STORAGE_KEY);
+      if (data) return JSON.parse(data);
+    } catch (e) {}
+    return null;
+  }
+
+  function saveSynthSettings(settings) {
+    try {
+      localStorage.setItem(SYNTH_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {}
+  }
+
+  // ── Synthesizer: export JSONL (one JSON object per line) ───────────────────
+  function exportAsJsonl(data, filename) {
+    try {
+      var lines = data.map(function(item) { return JSON.stringify(item); });
+      var blob = new Blob([lines.join('\n')], { type: 'application/jsonl' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'export.jsonl';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Failed to export JSONL:', e);
+    }
+  }
+
+  // ── Synthesizer panel component ───────────────────────────────────────────
+  function SynthesizerPanelFactory(system) {
+    var React = system.React;
+
+    return class SynthesizerPanel extends React.Component {
+      constructor(props) {
+        super(props);
+        var saved = loadSynthSettings() || {};
+        this.state = {
+          // Topic generation
+          topicPrompt: saved.topicPrompt || '',
+          topicDepth: saved.topicDepth != null ? saved.topicDepth : 3,
+          topicDegree: saved.topicDegree != null ? saved.topicDegree : 3,
+          topicSystemPrompt: saved.topicSystemPrompt || '',
+          topics: saved.topics || [],
+          topicGenerating: false,
+          topicProgress: '',
+
+          // Data generation
+          genSystemPrompt: saved.genSystemPrompt || '',
+          genInstructions: saved.genInstructions || '',
+          numSamples: saved.numSamples != null ? saved.numSamples : 4,
+          batchSize: saved.batchSize != null ? saved.batchSize : 3,
+          includeSystemMessage: saved.includeSystemMessage !== false,
+          enableToolCalls: saved.enableToolCalls || false,
+          outputSystemPrompt: saved.outputSystemPrompt || 'You are a helpful AI assistant that provides accurate and informative responses.',
+          generatedData: saved.generatedData || [],
+          dataGenerating: false,
+          dataProgress: '',
+
+          // Preview
+          previewIdx: 0,
+        };
+        this._abortController = null;
+        this.handleGenerateTopics = this.handleGenerateTopics.bind(this);
+        this.handleGenerateData = this.handleGenerateData.bind(this);
+        this.handleStop = this.handleStop.bind(this);
+        this.handleExportTopics = this.handleExportTopics.bind(this);
+        this.handleExportData = this.handleExportData.bind(this);
+        this.handleClearTopics = this.handleClearTopics.bind(this);
+        this.handleClearData = this.handleClearData.bind(this);
+      }
+
+      componentDidMount() {
+        ensureOpenapiSchemaCached();
+      }
+
+      componentDidUpdate(prevProps, prevState) {
+        // Persist key settings (not generated data to avoid quota issues)
+        if (prevState.topicPrompt !== this.state.topicPrompt ||
+            prevState.topicDepth !== this.state.topicDepth ||
+            prevState.topicDegree !== this.state.topicDegree ||
+            prevState.topicSystemPrompt !== this.state.topicSystemPrompt ||
+            prevState.genSystemPrompt !== this.state.genSystemPrompt ||
+            prevState.genInstructions !== this.state.genInstructions ||
+            prevState.numSamples !== this.state.numSamples ||
+            prevState.batchSize !== this.state.batchSize ||
+            prevState.includeSystemMessage !== this.state.includeSystemMessage ||
+            prevState.enableToolCalls !== this.state.enableToolCalls ||
+            prevState.outputSystemPrompt !== this.state.outputSystemPrompt) {
+          saveSynthSettings({
+            topicPrompt: this.state.topicPrompt,
+            topicDepth: this.state.topicDepth,
+            topicDegree: this.state.topicDegree,
+            topicSystemPrompt: this.state.topicSystemPrompt,
+            genSystemPrompt: this.state.genSystemPrompt,
+            genInstructions: this.state.genInstructions,
+            numSamples: this.state.numSamples,
+            batchSize: this.state.batchSize,
+            includeSystemMessage: this.state.includeSystemMessage,
+            enableToolCalls: this.state.enableToolCalls,
+            outputSystemPrompt: this.state.outputSystemPrompt,
+          });
+        }
+      }
+
+      componentWillUnmount() {
+        if (this._abortController) {
+          this._abortController.abort();
+          this._abortController = null;
+        }
+      }
+
+      // ── LLM call helper (non-streaming, returns content string) ─────────
+      _callLLM(messages, signal) {
+        var settings = loadFromStorage();
+        var baseUrl = (settings.baseUrl || '').replace(/\/+$/, '');
+        var headers = { 'Content-Type': 'application/json' };
+        if (settings.apiKey) {
+          headers['Authorization'] = 'Bearer ' + settings.apiKey;
+        }
+
+        var payload = {
+          messages: messages,
+          model: settings.modelId || 'llama3',
+          max_tokens: settings.maxTokens != null && settings.maxTokens !== '' ? parseInt(settings.maxTokens) : 4096,
+          temperature: settings.temperature != null && settings.temperature !== '' ? parseFloat(settings.temperature) : 0.7,
+          stream: false,
+        };
+
+        return fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(payload),
+          signal: signal,
+        })
+        .then(function(res) {
+          if (!res.ok) {
+            return res.text().then(function(text) {
+              throw new Error('HTTP ' + res.status + ': ' + text);
+            });
+          }
+          return res.json();
+        })
+        .then(function(data) {
+          var choice = data.choices && data.choices[0];
+          if (choice && choice.message && choice.message.content) {
+            return choice.message.content;
+          }
+          throw new Error('No content in LLM response');
+        });
+      }
+
+      // ── Topic graph generation ──────────────────────────────────────────
+      handleGenerateTopics() {
+        var self = this;
+        if (!this.state.topicPrompt.trim()) return;
+
+        this._abortController = new AbortController();
+        var signal = this._abortController.signal;
+        self.setState({ topicGenerating: true, topicProgress: 'Generating root topics...', topics: [] });
+
+        var depth = Math.max(1, Math.min(5, parseInt(this.state.topicDepth) || 3));
+        var degree = Math.max(1, Math.min(10, parseInt(this.state.topicDegree) || 3));
+        var rootPrompt = this.state.topicPrompt.trim();
+        var topicSysPrompt = this.state.topicSystemPrompt.trim() ||
+          'You are a topic generation assistant. Generate specific, diverse subtopics. Return ONLY a JSON array of strings, no other text.';
+
+        // Build the topic tree level-by-level (BFS)
+        var allTopics = [{ topic: rootPrompt, depth: 0, parent: null }];
+        var queue = [{ topic: rootPrompt, depth: 0 }];
+
+        function processLevel() {
+          if (queue.length === 0 || signal.aborted) {
+            self.setState({
+              topics: allTopics,
+              topicGenerating: false,
+              topicProgress: 'Generated ' + allTopics.length + ' topics'
+            });
+            return Promise.resolve();
+          }
+
+          var current = queue.shift();
+          if (current.depth >= depth) {
+            return processLevel();
+          }
+
+          self.setState({
+            topicProgress: 'Expanding "' + current.topic.substring(0, 40) + '..." (depth ' + (current.depth + 1) + '/' + depth + ')',
+            topics: allTopics.slice()
+          });
+
+          var expandPrompt = 'Generate exactly ' + degree + ' specific subtopics for: "' + current.topic + '"\n\n' +
+            'The subtopics should be diverse, specific, and directly related to the parent topic.\n' +
+            'Return ONLY a JSON array of ' + degree + ' strings. Example: ["subtopic1", "subtopic2", "subtopic3"]';
+
+          return self._callLLM([
+            { role: 'system', content: topicSysPrompt },
+            { role: 'user', content: expandPrompt }
+          ], signal)
+          .then(function(content) {
+            var subtopics = [];
+            try {
+              // Try to extract JSON array from response
+              var match = content.match(/\[[\s\S]*?\]/);
+              if (match) {
+                subtopics = JSON.parse(match[0]);
+              }
+            } catch (e) {
+              console.warn('Failed to parse topics:', content);
+            }
+
+            if (Array.isArray(subtopics)) {
+              subtopics.slice(0, degree).forEach(function(st) {
+                if (typeof st === 'string' && st.trim()) {
+                  var node = { topic: st.trim(), depth: current.depth + 1, parent: current.topic };
+                  allTopics.push(node);
+                  if (current.depth + 1 < depth) {
+                    queue.push({ topic: st.trim(), depth: current.depth + 1 });
+                  }
+                }
+              });
+            }
+
+            return processLevel();
+          })
+          .catch(function(err) {
+            if (err.name !== 'AbortError') {
+              console.error('Topic generation error:', err);
+              self.setState({
+                topicProgress: 'Error: ' + err.message,
+                topicGenerating: false
+              });
+            }
+          });
+        }
+
+        processLevel();
+      }
+
+      // ── Training data generation ────────────────────────────────────────
+      handleGenerateData() {
+        var self = this;
+        var topics = this.state.topics;
+        if (!topics || topics.length === 0) {
+          self.setState({ dataProgress: 'Generate topics first!' });
+          return;
+        }
+
+        this._abortController = new AbortController();
+        var signal = this._abortController.signal;
+        var numSamples = Math.max(1, parseInt(this.state.numSamples) || 4);
+        var batchSize = Math.max(1, parseInt(this.state.batchSize) || 3);
+        var includeSystem = this.state.includeSystemMessage;
+        var enableToolCalls = this.state.enableToolCalls;
+        var outputSystemPrompt = this.state.outputSystemPrompt.trim();
+        var genInstructions = this.state.genInstructions.trim();
+
+        // Build system prompt with OpenAPI context for generation
+        var selectedPreset = loadFromStorage().systemPromptPreset || 'api_assistant';
+        var apiSystemPrompt = getSystemPromptForPreset(selectedPreset, _cachedOpenapiSchema);
+        var genSysPrompt = this.state.genSystemPrompt.trim() ||
+          'You are a synthetic training data generator. Create realistic, diverse question-answer pairs.';
+
+        // Build OpenAPI context for tool call generation
+        var openapiContext = '';
+        var toolDef = null;
+        if (_cachedOpenapiSchema) {
+          openapiContext = buildOpenApiContext(_cachedOpenapiSchema);
+          if (enableToolCalls) {
+            toolDef = buildApiRequestTool(_cachedOpenapiSchema);
+          }
+        }
+
+        self.setState({
+          dataGenerating: true,
+          dataProgress: 'Generating training data (0/' + numSamples + ')...',
+          generatedData: []
+        });
+
+        var allData = [];
+        // Pick topics round-robin for the samples
+        var topicList = topics.filter(function(t) { return t.topic; }).map(function(t) { return t.topic; });
+        if (topicList.length === 0) topicList = ['general knowledge'];
+
+        var i = 0;
+
+        function generateBatch() {
+          if (i >= numSamples || signal.aborted) {
+            self.setState({
+              generatedData: allData,
+              dataGenerating: false,
+              dataProgress: 'Generated ' + allData.length + ' training examples'
+            });
+            return Promise.resolve();
+          }
+
+          var batchPromises = [];
+          for (var b = 0; b < batchSize && (i + b) < numSamples; b++) {
+            (function(idx) {
+              var topicIdx = idx % topicList.length;
+              var topic = topicList[topicIdx];
+
+              var userPrompt;
+              if (enableToolCalls && toolDef) {
+                userPrompt = 'Generate a realistic training example where a user asks about "' + topic + '" ' +
+                  'and the assistant needs to use the api_request tool to answer.\n\n' +
+                  'API Context:\n' + openapiContext.substring(0, 2000) + '\n\n' +
+                  'Available tool:\n' + JSON.stringify(toolDef, null, 2) + '\n\n' +
+                  (genInstructions ? 'Instructions: ' + genInstructions + '\n\n' : '') +
+                  'Return ONLY a JSON object with these fields:\n' +
+                  '- "user_message": the user\'s question (string)\n' +
+                  '- "tool_name": the tool function name to call (string)\n' +
+                  '- "tool_arguments": the arguments object for the tool call (object)\n' +
+                  '- "tool_result": a realistic JSON response from the tool (string)\n' +
+                  '- "assistant_response": the assistant\'s final natural-language answer (string)';
+              } else {
+                userPrompt = 'Generate a training example about: "' + topic + '"\n\n' +
+                  (genInstructions ? 'Instructions: ' + genInstructions + '\n\n' : '') +
+                  (openapiContext ? 'API Context (for reference):\n' + openapiContext.substring(0, 2000) + '\n\n' : '') +
+                  'Return ONLY a JSON object with these fields:\n' +
+                  '- "user_message": a realistic user question (string)\n' +
+                  '- "assistant_response": a detailed, helpful answer (string)';
+              }
+
+              var promise = self._callLLM([
+                { role: 'system', content: genSysPrompt },
+                { role: 'user', content: userPrompt }
+              ], signal)
+              .then(function(content) {
+                try {
+                  var match = content.match(/\{[\s\S]*\}/);
+                  if (match) {
+                    var parsed = JSON.parse(match[0]);
+                    var messages = [];
+
+                    if (includeSystem) {
+                      messages.push({
+                        role: 'system',
+                        content: outputSystemPrompt || apiSystemPrompt
+                      });
+                    }
+
+                    messages.push({
+                      role: 'user',
+                      content: parsed.user_message || 'No question generated'
+                    });
+
+                    if (enableToolCalls && parsed.tool_name) {
+                      // Assistant issues a tool call
+                      var callId = 'call_' + (idx + 1);
+                      messages.push({
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [{
+                          id: callId,
+                          type: 'function',
+                          function: {
+                            name: parsed.tool_name,
+                            arguments: parsed.tool_arguments || {}
+                          }
+                        }]
+                      });
+
+                      // Tool responds
+                      var toolContent = typeof parsed.tool_result === 'string'
+                        ? parsed.tool_result
+                        : JSON.stringify(parsed.tool_result || {});
+                      messages.push({
+                        role: 'tool',
+                        name: parsed.tool_name,
+                        tool_call_id: callId,
+                        content: toolContent
+                      });
+                    }
+
+                    // Final assistant response
+                    messages.push({
+                      role: 'assistant',
+                      content: parsed.assistant_response || 'No answer generated'
+                    });
+
+                    return { messages: messages };
+                  }
+                } catch (e) {
+                  console.warn('Failed to parse generated data:', e);
+                }
+                return null;
+              })
+              .catch(function(err) {
+                if (err.name !== 'AbortError') {
+                  console.warn('Generation error for sample ' + idx + ':', err);
+                }
+                return null;
+              });
+
+              batchPromises.push(promise);
+            })(i + b);
+          }
+
+          i += batchSize;
+
+          return Promise.all(batchPromises).then(function(results) {
+            results.forEach(function(r) {
+              if (r) allData.push(r);
+            });
+            self.setState({
+              generatedData: allData.slice(),
+              dataProgress: 'Generating training data (' + Math.min(i, numSamples) + '/' + numSamples + ')...'
+            });
+            return generateBatch();
+          });
+        }
+
+        generateBatch();
+      }
+
+      handleStop() {
+        if (this._abortController) {
+          this._abortController.abort();
+          this._abortController = null;
+        }
+        this.setState({ topicGenerating: false, dataGenerating: false });
+      }
+
+      handleExportTopics() {
+        if (this.state.topics.length === 0) return;
+        exportAsJsonl(this.state.topics, 'synth-topics.jsonl');
+      }
+
+      handleExportData() {
+        if (this.state.generatedData.length === 0) return;
+        exportAsJsonl(this.state.generatedData, 'synth-training-data.jsonl');
+      }
+
+      handleClearTopics() {
+        this.setState({ topics: [], topicProgress: '' });
+      }
+
+      handleClearData() {
+        this.setState({ generatedData: [], dataProgress: '', previewIdx: 0 });
+      }
+
+      render() {
+        var self = this;
+        var s = this.state;
+
+        var panelStyle = {
+          padding: '20px',
+          fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          color: 'var(--theme-text-primary)',
+          maxWidth: '900px',
+          margin: '0 auto',
+        };
+
+        var sectionStyle = {
+          marginBottom: '24px',
+          padding: '16px',
+          border: '1px solid var(--theme-border-color)',
+          borderRadius: '8px',
+          background: 'var(--theme-panel-bg)',
+        };
+
+        var sectionTitleStyle = {
+          fontSize: '14px',
+          fontWeight: '600',
+          marginBottom: '12px',
+          color: 'var(--theme-text-primary)',
+        };
+
+        var labelStyle = {
+          display: 'block',
+          fontSize: '12px',
+          fontWeight: '500',
+          color: 'var(--theme-text-secondary)',
+          marginBottom: '4px',
+          marginTop: '8px',
+        };
+
+        var inputStyle = {
+          width: '100%',
+          padding: '8px 10px',
+          border: '1px solid var(--theme-border-color)',
+          borderRadius: '6px',
+          background: 'var(--theme-input-bg)',
+          color: 'var(--theme-text-primary)',
+          fontSize: '13px',
+          fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          boxSizing: 'border-box',
+        };
+
+        var textareaStyle = Object.assign({}, inputStyle, {
+          resize: 'vertical',
+          minHeight: '60px',
+          fontFamily: "'Consolas', 'Monaco', monospace",
+          fontSize: '12px',
+        });
+
+        var btnStyle = {
+          padding: '8px 16px',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: '500',
+          marginRight: '8px',
+          marginTop: '8px',
+          transition: 'all 0.2s ease',
+        };
+
+        var primaryBtn = Object.assign({}, btnStyle, {
+          background: 'var(--theme-primary)',
+          color: '#fff',
+        });
+
+        var secondaryBtn = Object.assign({}, btnStyle, {
+          background: 'var(--theme-secondary)',
+          color: 'var(--theme-text-primary)',
+        });
+
+        var dangerBtn = Object.assign({}, btnStyle, {
+          background: '#dc2626',
+          color: '#fff',
+        });
+
+        var disabledBtn = Object.assign({}, btnStyle, {
+          background: 'var(--theme-secondary)',
+          color: 'var(--theme-text-secondary)',
+          cursor: 'not-allowed',
+          opacity: 0.6,
+        });
+
+        var inlineRow = {
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'flex-end',
+          flexWrap: 'wrap',
+        };
+
+        var smallInputStyle = Object.assign({}, inputStyle, {
+          width: '80px',
+        });
+
+        var progressStyle = {
+          fontSize: '12px',
+          color: 'var(--theme-text-secondary)',
+          marginTop: '8px',
+          fontStyle: 'italic',
+        };
+
+        var topicTreeStyle = {
+          maxHeight: '200px',
+          overflowY: 'auto',
+          padding: '8px',
+          border: '1px solid var(--theme-border-color)',
+          borderRadius: '6px',
+          background: 'var(--theme-input-bg)',
+          marginTop: '8px',
+          fontSize: '12px',
+          fontFamily: "'Consolas', 'Monaco', monospace",
+          lineHeight: '1.6',
+        };
+
+        var previewStyle = {
+          maxHeight: '300px',
+          overflowY: 'auto',
+          padding: '12px',
+          border: '1px solid var(--theme-border-color)',
+          borderRadius: '6px',
+          background: 'var(--theme-input-bg)',
+          marginTop: '8px',
+          fontSize: '12px',
+          fontFamily: "'Consolas', 'Monaco', monospace",
+          lineHeight: '1.6',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        };
+
+        var checkboxRow = {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '8px',
+          fontSize: '12px',
+        };
+
+        var isGenerating = s.topicGenerating || s.dataGenerating;
+
+        // Render topic tree items
+        var topicElements = [];
+        if (s.topics.length > 0) {
+          s.topics.forEach(function(t, idx) {
+            var indent = '  '.repeat(t.depth);
+            var prefix = t.depth === 0 ? '📌 ' : '├─ ';
+            topicElements.push(
+              React.createElement('div', { key: idx, style: { paddingLeft: (t.depth * 16) + 'px' } },
+                prefix + t.topic
+              )
+            );
+          });
+        }
+
+        // Render preview of selected generated data
+        var previewContent = '';
+        if (s.generatedData.length > 0 && s.previewIdx < s.generatedData.length) {
+          previewContent = JSON.stringify(s.generatedData[s.previewIdx], null, 2);
+        }
+
+        return React.createElement('div', { style: panelStyle },
+          // Header
+          React.createElement('div', {
+            style: { marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
+          },
+            React.createElement('h2', {
+              style: { margin: 0, fontSize: '18px', fontWeight: '600', color: 'var(--theme-text-primary)' }
+            }, '🧪 Synthetic Training Data Generator'),
+            React.createElement('span', {
+              style: { fontSize: '11px', color: 'var(--theme-text-secondary)' }
+            }, 'Uses LLM settings from Settings tab')
+          ),
+
+          // ── Section 1: Topic Generation ────────────────────────────────
+          React.createElement('div', { style: sectionStyle },
+            React.createElement('div', { style: sectionTitleStyle }, '📊 Topic Generation (Graph Mode)'),
+
+            React.createElement('label', { style: labelStyle }, 'Root Topic / Prompt'),
+            React.createElement('input', {
+              type: 'text',
+              value: s.topicPrompt,
+              onChange: function(e) { self.setState({ topicPrompt: e.target.value }); },
+              placeholder: 'e.g. Python programming fundamentals',
+              style: inputStyle,
+              disabled: isGenerating
+            }),
+
+            React.createElement('div', { style: inlineRow },
+              React.createElement('div', null,
+                React.createElement('label', { style: labelStyle }, 'Depth'),
+                React.createElement('input', {
+                  type: 'number',
+                  value: s.topicDepth,
+                  min: 1, max: 5,
+                  onChange: function(e) { self.setState({ topicDepth: parseInt(e.target.value) || 1 }); },
+                  style: smallInputStyle,
+                  disabled: isGenerating
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { style: labelStyle }, 'Degree'),
+                React.createElement('input', {
+                  type: 'number',
+                  value: s.topicDegree,
+                  min: 1, max: 10,
+                  onChange: function(e) { self.setState({ topicDegree: parseInt(e.target.value) || 1 }); },
+                  style: smallInputStyle,
+                  disabled: isGenerating
+                })
+              )
+            ),
+
+            React.createElement('label', { style: labelStyle }, 'Topic Generation System Prompt (optional)'),
+            React.createElement('textarea', {
+              value: s.topicSystemPrompt,
+              onChange: function(e) { self.setState({ topicSystemPrompt: e.target.value }); },
+              placeholder: 'Custom system prompt for topic generation (leave blank for default)',
+              style: textareaStyle,
+              disabled: isGenerating
+            }),
+
+            // Buttons
+            React.createElement('div', null,
+              React.createElement('button', {
+                onClick: s.topicGenerating ? null : self.handleGenerateTopics,
+                disabled: isGenerating || !s.topicPrompt.trim(),
+                style: (isGenerating || !s.topicPrompt.trim()) ? disabledBtn : primaryBtn,
+              }, s.topicGenerating ? '⏳ Generating...' : '🔄 Generate Topics'),
+
+              isGenerating && React.createElement('button', {
+                onClick: self.handleStop,
+                style: dangerBtn,
+              }, '⏹ Stop'),
+
+              s.topics.length > 0 && React.createElement('button', {
+                onClick: self.handleExportTopics,
+                style: secondaryBtn,
+                disabled: isGenerating,
+              }, '💾 Export Topics'),
+
+              s.topics.length > 0 && React.createElement('button', {
+                onClick: self.handleClearTopics,
+                style: secondaryBtn,
+                disabled: isGenerating,
+              }, '🗑 Clear')
+            ),
+
+            s.topicProgress && React.createElement('div', { style: progressStyle }, s.topicProgress),
+
+            // Topic tree display
+            s.topics.length > 0 && React.createElement('div', { style: topicTreeStyle }, topicElements)
+          ),
+
+          // ── Section 2: Data Generation ─────────────────────────────────
+          React.createElement('div', { style: sectionStyle },
+            React.createElement('div', { style: sectionTitleStyle }, '📝 Training Data Generation'),
+
+            React.createElement('label', { style: labelStyle }, 'Generation System Prompt'),
+            React.createElement('textarea', {
+              value: s.genSystemPrompt,
+              onChange: function(e) { self.setState({ genSystemPrompt: e.target.value }); },
+              placeholder: 'System prompt for the generation LLM (leave blank for default)',
+              style: textareaStyle,
+              disabled: isGenerating
+            }),
+
+            React.createElement('label', { style: labelStyle }, 'Instructions'),
+            React.createElement('textarea', {
+              value: s.genInstructions,
+              onChange: function(e) { self.setState({ genInstructions: e.target.value }); },
+              placeholder: 'e.g. Create diverse questions and detailed answers suitable for learning.',
+              style: textareaStyle,
+              disabled: isGenerating
+            }),
+
+            React.createElement('label', { style: labelStyle }, 'Output System Prompt (goes into training data)'),
+            React.createElement('textarea', {
+              value: s.outputSystemPrompt,
+              onChange: function(e) { self.setState({ outputSystemPrompt: e.target.value }); },
+              placeholder: 'System prompt that will be included in each training example',
+              style: textareaStyle,
+              disabled: isGenerating
+            }),
+
+            React.createElement('div', { style: inlineRow },
+              React.createElement('div', null,
+                React.createElement('label', { style: labelStyle }, 'Num Samples'),
+                React.createElement('input', {
+                  type: 'number',
+                  value: s.numSamples,
+                  min: 1, max: 100,
+                  onChange: function(e) { self.setState({ numSamples: parseInt(e.target.value) || 1 }); },
+                  style: smallInputStyle,
+                  disabled: isGenerating
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { style: labelStyle }, 'Batch Size'),
+                React.createElement('input', {
+                  type: 'number',
+                  value: s.batchSize,
+                  min: 1, max: 10,
+                  onChange: function(e) { self.setState({ batchSize: parseInt(e.target.value) || 1 }); },
+                  style: smallInputStyle,
+                  disabled: isGenerating
+                })
+              )
+            ),
+
+            React.createElement('div', { style: checkboxRow },
+              React.createElement('input', {
+                type: 'checkbox',
+                checked: s.includeSystemMessage,
+                onChange: function(e) { self.setState({ includeSystemMessage: e.target.checked }); },
+                id: 'synth-include-system',
+                disabled: isGenerating
+              }),
+              React.createElement('label', { htmlFor: 'synth-include-system' }, 'Include system message in training data')
+            ),
+
+            React.createElement('div', { style: checkboxRow },
+              React.createElement('input', {
+                type: 'checkbox',
+                checked: s.enableToolCalls,
+                onChange: function(e) { self.setState({ enableToolCalls: e.target.checked }); },
+                id: 'synth-enable-tools',
+                disabled: isGenerating
+              }),
+              React.createElement('label', { htmlFor: 'synth-enable-tools' }, 'Enable tool calling in training data (uses OpenAPI endpoints)')
+            ),
+
+            // Buttons
+            React.createElement('div', null,
+              React.createElement('button', {
+                onClick: s.dataGenerating ? null : self.handleGenerateData,
+                disabled: isGenerating || s.topics.length === 0,
+                style: (isGenerating || s.topics.length === 0) ? disabledBtn : primaryBtn,
+              }, s.dataGenerating ? '⏳ Generating...' : '🚀 Generate Training Data'),
+
+              isGenerating && React.createElement('button', {
+                onClick: self.handleStop,
+                style: dangerBtn,
+              }, '⏹ Stop'),
+
+              s.generatedData.length > 0 && React.createElement('button', {
+                onClick: self.handleExportData,
+                style: secondaryBtn,
+                disabled: isGenerating,
+              }, '💾 Export JSONL'),
+
+              s.generatedData.length > 0 && React.createElement('button', {
+                onClick: self.handleClearData,
+                style: secondaryBtn,
+                disabled: isGenerating,
+              }, '🗑 Clear')
+            ),
+
+            s.dataProgress && React.createElement('div', { style: progressStyle }, s.dataProgress)
+          ),
+
+          // ── Section 3: Preview ─────────────────────────────────────────
+          s.generatedData.length > 0 && React.createElement('div', { style: sectionStyle },
+            React.createElement('div', { style: sectionTitleStyle },
+              '👁 Preview (' + (s.previewIdx + 1) + '/' + s.generatedData.length + ')'
+            ),
+
+            React.createElement('div', { style: { display: 'flex', gap: '8px', marginBottom: '8px' } },
+              React.createElement('button', {
+                onClick: function() {
+                  self.setState(function(prev) {
+                    return { previewIdx: Math.max(0, prev.previewIdx - 1) };
+                  });
+                },
+                disabled: s.previewIdx === 0,
+                style: s.previewIdx === 0 ? disabledBtn : secondaryBtn,
+              }, '◀ Prev'),
+              React.createElement('button', {
+                onClick: function() {
+                  self.setState(function(prev) {
+                    return { previewIdx: Math.min(prev.generatedData.length - 1, prev.previewIdx + 1) };
+                  });
+                },
+                disabled: s.previewIdx >= s.generatedData.length - 1,
+                style: s.previewIdx >= s.generatedData.length - 1 ? disabledBtn : secondaryBtn,
+              }, 'Next ▶')
+            ),
+
+            React.createElement('div', { style: previewStyle },
+              React.createElement('code', null, previewContent)
+            )
+          )
+        );
+      }
+    };
+  }
+
   // ── Plugin definition ───────────────────────────────────────────────────────
   window.LLMSettingsPlugin = function (system) {
     return {
@@ -3630,6 +4479,7 @@
         LLMSettingsPanel: LLMSettingsPanelFactory(system),
         ChatPanel: ChatPanelFactory(system),
         WorkflowPanel: WorkflowPanelFactory(system),
+        SynthesizerPanel: SynthesizerPanelFactory(system),
       },
     };
   };

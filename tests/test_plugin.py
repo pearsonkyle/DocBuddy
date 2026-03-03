@@ -982,3 +982,145 @@ def test_chat_panel_reuses_cached_schema():
 
     # fetchOpenApiSchema should short-circuit when _cachedOpenapiSchema is set
     assert "if (_cachedOpenapiSchema)" in js_content
+
+
+# ── Synthesizer tab tests ──────────────────────────────────────────────────
+
+
+def test_synthesizer_tab_in_layout():
+    """Verify layout plugin has Synthesizer tab."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+
+    assert "synthesizer" in js_content.lower()
+    assert "SynthesizerPanel" in js_content
+
+
+def test_synthesizer_panel_component():
+    """Verify SynthesizerPanel component is included."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "SynthesizerPanel" in js_content
+    assert "SynthesizerPanelFactory" in js_content
+
+
+def test_synthesizer_topic_generation():
+    """Verify synthesizer has topic generation functionality."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "handleGenerateTopics" in js_content
+    assert "topicPrompt" in js_content
+    assert "topicDepth" in js_content
+    assert "topicDegree" in js_content
+
+
+def test_synthesizer_graph_mode():
+    """Verify synthesizer uses graph-based topic generation with BFS."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    # Graph mode uses queue-based BFS expansion
+    assert "queue" in js_content
+    assert "processLevel" in js_content
+    assert "parent" in js_content
+
+
+def test_synthesizer_data_generation():
+    """Verify synthesizer has training data generation functionality."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "handleGenerateData" in js_content
+    assert "numSamples" in js_content
+    assert "batchSize" in js_content
+    assert "generatedData" in js_content
+
+
+def test_synthesizer_tool_call_format():
+    """Verify synthesizer generates proper tool calling format."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    # Tool call format: assistant with tool_calls, tool role response
+    assert "enableToolCalls" in js_content
+    assert "tool_call_id" in js_content
+    assert "tool_calls" in js_content
+    assert '"role": "tool"' in js_content or "'role': 'tool'" in js_content or "role: 'tool'" in js_content
+
+
+def test_synthesizer_output_system_prompt():
+    """Verify synthesizer includes configurable output system prompt."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "outputSystemPrompt" in js_content
+    assert "includeSystemMessage" in js_content
+
+
+def test_synthesizer_jsonl_export():
+    """Verify synthesizer can export data as JSONL."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "exportAsJsonl" in js_content
+    assert "application/jsonl" in js_content
+    assert "handleExportData" in js_content
+    assert "handleExportTopics" in js_content
+
+
+def test_synthesizer_storage_key():
+    """Verify correct localStorage key for synthesizer."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "docbuddy-synthesizer" in js_content
+
+
+def test_synthesizer_uses_openapi_context():
+    """Verify synthesizer uses OpenAPI context for generation."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "buildOpenApiContext" in js_content
+    assert "buildApiRequestTool" in js_content
+
+
+def test_synthesizer_uses_preset_system_prompt():
+    """Verify synthesizer uses the preset system prompt."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "getSystemPromptForPreset" in js_content
+
+
+def test_synthesizer_preview_section():
+    """Verify synthesizer has a preview section for generated data."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "previewIdx" in js_content
+    assert "Preview" in js_content
+
+
+def test_synthesizer_stop_functionality():
+    """Verify synthesizer can stop generation in progress."""
+    client = TestClient(make_app())
+
+    js_content = client.get("/docbuddy-static/llm-settings-plugin.js").text
+
+    assert "handleStop" in js_content
+    assert "AbortController" in js_content
