@@ -36,7 +36,7 @@ That's it! Visit `/docs`
 - **API URL**: Enter the API endpoint for your LLM (e.g. `http://localhost:1234/v1` for LMStudio)
 - **Test Connection**: Verify that the plugin can connect to your LLM provider and select a model from the drop down after.
 
-Some local LLM providers will require additional configuration to work with the plugin. For example, LM Studio users will need to enable CORS in their LM Studio settings to allow the plugin to connect from the browser.
+Some local LLM providers will require users to enable CORS in their API settings to allow the plugin to connect from the browser.
 
 ![](examples/lmstudio_cors.png)
 
