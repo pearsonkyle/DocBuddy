@@ -22,7 +22,6 @@
       var LLMSettingsPanel = system.getComponent("LLMSettingsPanel", true);
       var ChatPanel = system.getComponent("ChatPanel", true);
       var WorkflowPanel = system.getComponent("WorkflowPanel", true);
-      var SynthesizerPanel = system.getComponent("SynthesizerPanel", true);
 
       // Get saved tab preference, default to "api"
       var savedTab = localStorage.getItem(TAB_STORAGE_KEY) || "api";
@@ -91,8 +90,8 @@
         };
       };
 
-      // Content area style - full height for chat, settings, workflow, and synthesizer
-      var isContained = activeTab === "chat" || activeTab === "settings" || activeTab === "workflow" || activeTab === "synthesizer";
+      // Content area style - full height for chat, settings, and workflow
+      var isContained = activeTab === "chat" || activeTab === "settings" || activeTab === "workflow";
       var contentStyle = {
         border: "1px solid var(--theme-border-color)",
         borderTop: "none",
@@ -157,12 +156,6 @@
               { role: "tab", "aria-selected": activeTab === "workflow", onClick: function () { setActiveTab("workflow"); }, style: tabStyle("workflow") },
               "Workflow"
             ),
-            // Synthesizer tab
-            React.createElement(
-              "button",
-              { role: "tab", "aria-selected": activeTab === "synthesizer", onClick: function () { setActiveTab("synthesizer"); }, style: tabStyle("synthesizer") },
-              "Synthesizer"
-            ),
             // Settings tab
             React.createElement(
               "button",
@@ -187,11 +180,6 @@
           // Workflow tab content (always mounted, hidden via CSS to preserve streaming state across tab switches)
           React.createElement("div", { style: { display: activeTab === "workflow" ? "block" : "none", height: "100%" } },
             React.createElement(WorkflowPanel, null)
-          ),
-
-          // Synthesizer tab content (always mounted, hidden via CSS to preserve state across tab switches)
-          React.createElement("div", { style: { display: activeTab === "synthesizer" ? "block" : "none", height: "100%" } },
-            React.createElement(SynthesizerPanel, null)
           ),
 
           // LLM Settings tab content
