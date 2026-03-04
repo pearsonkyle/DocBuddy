@@ -1179,7 +1179,7 @@ def test_synthesizer_openapi_context_placeholder():
     assert "replaceOpenapiPlaceholder" in js_content
     assert "{openapi_context}" in js_content
     # Hint text should tell user about the placeholder
-    assert "replaced at send time" in js_content
+    assert "Replaced when generating data" in js_content
 
 
 def test_synthesizer_prefilled_gen_system_prompt():

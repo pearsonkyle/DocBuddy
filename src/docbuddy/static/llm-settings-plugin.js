@@ -4493,7 +4493,7 @@
             }),
             React.createElement('div', {
               style: { color: 'var(--theme-text-secondary)', fontSize: '10px', marginTop: '4px' }
-            }, 'Use {openapi_context} to insert your API schema. It is replaced at send time.'),
+            }, 'Use {openapi_context} to insert your API schema. Replaced when generating data.'),
 
             // Buttons
             React.createElement('div', null,
@@ -4541,7 +4541,7 @@
             }),
             React.createElement('div', {
               style: { color: 'var(--theme-text-secondary)', fontSize: '10px', marginTop: '4px' }
-            }, 'Use {openapi_context} to insert your API schema. It is replaced at send time.'),
+            }, 'Use {openapi_context} to insert your API schema. Replaced when generating data.'),
 
             React.createElement('label', { style: labelStyle }, 'Generation Instructions'),
             React.createElement('textarea', {
@@ -4562,7 +4562,7 @@
             }),
             React.createElement('div', {
               style: { color: 'var(--theme-text-secondary)', fontSize: '10px', marginTop: '4px' }
-            }, 'Use {openapi_context} to insert your API schema. It is replaced at export/generation time.'),
+            }, 'Use {openapi_context} to insert your API schema. Replaced when generating data.'),
 
             React.createElement('div', { style: inlineRow },
               React.createElement('div', null,
