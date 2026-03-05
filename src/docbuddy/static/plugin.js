@@ -1,8 +1,11 @@
-// LLM Layout Plugin
-// Wraps the standard Swagger UI BaseLayout with tabs for API, Chat, and Settings.
+// DocBuddy Plugin — assembles the Swagger UI plugin from the DocBuddy namespace.
+// Combines state management, component factories, and the tab layout.
+// Load order: core.js -> chat.js, settings.js, workflow.js -> plugin.js
 
 (function () {
   "use strict";
+
+  var DB = window.DocBuddy;
 
   // Storage key for persisting active tab
   var TAB_STORAGE_KEY = "docbuddy-active-tab";
@@ -13,8 +16,8 @@
     style.textContent = "@keyframes docbuddy-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }";
     document.head.appendChild(style);
   })();
-  
-  window.LLMLayoutPlugin = function (system) {
+
+  window.DocBuddyPlugin = function (system) {
     var React = system.React;
 
     function LLMDocsLayout(props) {
@@ -194,19 +197,19 @@
             )
           )
         ),
-        
+
         // Content area - use dynamic contentStyle for proper chat height
         React.createElement(
           "div",
           { role: "tabpanel", style: contentStyle },
           // API api tab content
           activeTab === "api" ? React.createElement(BaseLayout, props) : null,
-          
+
           // Chat tab content (always mounted, hidden via CSS to preserve streaming state across tab switches)
           React.createElement("div", { style: { display: activeTab === "chat" ? "block" : "none", height: "100%" } },
             React.createElement(ChatPanel, null)
           ),
-          
+
           // Workflow tab content (always mounted, hidden via CSS to preserve streaming state across tab switches)
           React.createElement("div", { style: { display: activeTab === "workflow" ? "block" : "none", height: "100%" } },
             React.createElement(WorkflowPanel, null)
@@ -219,7 +222,17 @@
     }
 
     return {
+      statePlugins: {
+        llmSettings: {
+          actions: DB.actions,
+          reducers: { llmSettings: DB.llmSettingsReducer },
+          selectors: DB.selectors,
+        },
+      },
       components: {
+        LLMSettingsPanel: DB.LLMSettingsPanelFactory(system),
+        ChatPanel: DB.ChatPanelFactory(system),
+        WorkflowPanel: DB.WorkflowPanelFactory(system),
         LLMDocsLayout: LLMDocsLayout,
       },
     };

@@ -1,5 +1,5 @@
 // DocBuddy Settings Panel — LLM configuration, theme, and tool calling settings
-// Depends on: docbuddy-core.js (window.DocBuddy)
+// Depends on: core.js (window.DocBuddy)
 
 (function () {
   "use strict";

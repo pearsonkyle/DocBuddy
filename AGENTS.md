@@ -64,10 +64,10 @@ The JavaScript codebase is split into **modular files** that communicate via the
 #### Module Loading Order
 
 ```
-docbuddy-core.js → docbuddy-chat.js, docbuddy-settings.js, docbuddy-workflow.js → docbuddy-plugin.js → llm-layout-plugin.js
+core.js → chat.js, settings.js, workflow.js → plugin.js
 ```
 
-#### `docbuddy-core.js` — Shared Utilities & State
+#### `core.js` — Shared Utilities & State
 
 Establishes the `window.DocBuddy` namespace with all shared code:
 
@@ -81,31 +81,28 @@ Establishes the `window.DocBuddy` namespace with all shared code:
 - **CSS injection**: Chat/component styles injected via `injectStyles()`
 - **Constants**: `LLM_PROVIDERS`, `STATUS_EMOJI`, `DEFAULT_STATE`
 
-#### `docbuddy-chat.js` — Chat Panel
+#### `chat.js` — Chat Panel
 
 Contains `ChatPanelFactory` — the chat interface for API documentation questions with SSE streaming, tool calling, error classification, and message rendering. Reads shared utilities from `window.DocBuddy` (aliased as `DB`).
 
-#### `docbuddy-settings.js` — Settings Panel
+#### `settings.js` — Settings Panel
 
 Contains `LLMSettingsPanelFactory` — the settings form with provider presets, connection tester, theme configuration, system prompt presets, and tool calling options.
 
-#### `docbuddy-workflow.js` — Workflow Panel
+#### `workflow.js` — Workflow Panel
 
 Contains `WorkflowPanelFactory` — the multi-step AI workflow builder with block chaining, tool calling, and output display.
 
-#### `docbuddy-plugin.js` — Plugin Assembly
+#### `plugin.js` — Plugin Assembly & Tab Layout
 
-~25-line file that assembles `window.LLMSettingsPlugin` from the `DocBuddy` namespace components: actions, reducer, selectors, and component factories.
+Assembles `window.DocBuddyPlugin` from the `DocBuddy` namespace components: actions, reducer, selectors, component factories, and the tab navigation layout (`LLMDocsLayout`).
 
-#### `llm-layout-plugin.js` — Tab Navigation Layout
-
-Wraps Swagger UI's BaseLayout with tab navigation:
-
-**Features:**
+**Tab Layout Features:**
 - **4 Tabs**: API Explorer, Chat, Workflow, Settings
 - **Tab Persistence**: Saves active tab to localStorage (`docbuddy-active-tab`)
 - **Dynamic Height**: Chat and Settings tabs use full available height (calc(100vh - 120px))
 - **API Tab Scrolling**: API tab allows normal scrolling (no overscroll containment)
+- **Streaming Indicators**: Pulsing dots on Chat/Workflow tabs when streaming in background
 
 **Global Functions:**
 - `window.llmSwitchTab(tabName)` — Switch tabs programmatically
@@ -117,11 +114,9 @@ Wraps Swagger UI's BaseLayout with tab navigation:
   - Loads Swagger UI from CDN
   - Injects theme CSS immediately (prevents FOUC)
   - Loads the 5 modular DocBuddy JS files in order (hardcoded paths to `/docbuddy-static/`)
-  - Loads `llm-layout-plugin.js` last (depends on all DocBuddy components)
   - Injects JavaScript plugins in **correct order**:
     1. `SwaggerUIBundle.plugins.DownloadUrl`
-    2. `LLMSettingsPlugin` (assembled by `docbuddy-plugin.js`)
-    3. `LLMLayoutPlugin` (depends on LLMSettingsPanel, ChatPanel, WorkflowPanel)
+    2. `DocBuddyPlugin` (assembled by `plugin.js`)
   - Supports dynamic URL injection via template parameters
   - Includes DOMPurify for safe HTML sanitization
 
@@ -156,7 +151,7 @@ Wraps Swagger UI's BaseLayout with tab navigation:
 
 ## Provider Presets
 
-Defined in `docbuddy-core.js`:
+Defined in `core.js`:
 - `ollama` — `http://localhost:11434/v1`
 - `lmstudio` — `http://localhost:1234/v1`
 - `vllm` — `http://localhost:8000/v1`
@@ -239,7 +234,7 @@ The `{openapi_context}` placeholder is replaced with the formatted OpenAPI schem
 1. **No build step** — Plain ES6+ (no JSX, no transpilation, no module bundler).
 2. **IIFE pattern** — All modules wrapped in `(function () { ... })();` for scope isolation.
 3. **Shared namespace** — `window.DocBuddy` is the shared namespace. Modules read from it as `var DB = window.DocBuddy;`.
-4. **Global objects** — `window.LLMSettingsPlugin`, `window.LLMLayoutPlugin`, `window.applyLLMTheme`, `window.llmOpenSettings`.
+4. **Global objects** — `window.DocBuddyPlugin`, `window.applyLLMTheme`, `window.llmOpenSettings`, `window.llmSwitchTab`.
 5. **Browser compatibility** — Must work in modern browsers without polyfills.
 6. **CDN dependencies** — marked.js and Swagger UI loaded from jsDelivr CDN, DOMPurify for security.
 7. **AbortController pattern** — Use AbortController for request cancellation (streaming, tool calls).
@@ -261,20 +256,18 @@ The `{openapi_context}` placeholder is replaced with the formatted OpenAPI schem
 ### Plugin Registration Order
 In `swagger_ui.html`, plugins must be registered in this order:
 1. `SwaggerUIBundle.plugins.DownloadUrl`
-2. `LLMSettingsPlugin` (assembled by `docbuddy-plugin.js` from `window.DocBuddy` components)
-3. `LLMLayoutPlugin` (depends on LLMSettingsPanel, ChatPanel, WorkflowPanel)
+2. `DocBuddyPlugin` (assembled by `plugin.js` from `window.DocBuddy` components)
 
 The script loading order is critical:
-1. `docbuddy-core.js` (creates `window.DocBuddy` namespace)
-2. `docbuddy-chat.js`, `docbuddy-settings.js`, `docbuddy-workflow.js` (any order among these)
-3. `docbuddy-plugin.js` (assembles `window.LLMSettingsPlugin`)
-4. `llm-layout-plugin.js` (uses components from `LLMSettingsPlugin`)
+1. `core.js` (creates `window.DocBuddy` namespace)
+2. `chat.js`, `settings.js`, `workflow.js` (any order among these)
+3. `plugin.js` (assembles `window.DocBuddyPlugin` with layout)
 
 Changing this order will break the UI.
 
 ### Template System
 - Jinja2 used for HTML rendering.
-- External JS/CSS URLs (e.g., Swagger UI CDN resources and the layout plugin URL) are injected via template parameters; internal `docbuddy-*.js` module paths are hardcoded in the template.
+- External JS/CSS URLs (e.g., Swagger UI CDN resources) are injected via template parameters; internal DocBuddy module paths are hardcoded in the template.
 - `debug=True` enables auto-reload for development.
 - FOUC fix: Theme injection script runs immediately in `<head>`.
 
@@ -310,12 +303,11 @@ Changing this order will break the UI.
 |------|---------|
 | `src/docbuddy/__init__.py` | Public API exports |
 | `src/docbuddy/plugin.py` | Core Python plugin logic |
-| `src/docbuddy/static/docbuddy-core.js` | Shared namespace, utilities, state, storage, OpenAPI helpers |
-| `src/docbuddy/static/docbuddy-chat.js` | ChatPanel component |
-| `src/docbuddy/static/docbuddy-settings.js` | LLMSettingsPanel component |
-| `src/docbuddy/static/docbuddy-workflow.js` | WorkflowPanel component |
-| `src/docbuddy/static/docbuddy-plugin.js` | Plugin assembly (combines namespace into LLMSettingsPlugin) |
-| `src/docbuddy/static/llm-layout-plugin.js` | Tab navigation layout |
+| `src/docbuddy/static/core.js` | Shared namespace, utilities, state, storage, OpenAPI helpers |
+| `src/docbuddy/static/chat.js` | ChatPanel component |
+| `src/docbuddy/static/settings.js` | LLMSettingsPanel component |
+| `src/docbuddy/static/workflow.js` | WorkflowPanel component |
+| `src/docbuddy/static/plugin.js` | Plugin assembly, tab layout (combines namespace into DocBuddyPlugin) |
 | `src/docbuddy/templates/swagger_ui.html` | Jinja2 template for docs page |
 | `src/docbuddy/static/system-prompt-config.json` | System prompt presets configuration |
 | `examples/demo_server.py` | Demo FastAPI server with sample endpoints |

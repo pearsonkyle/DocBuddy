@@ -18,11 +18,11 @@ from docbuddy.plugin import get_swagger_ui_html
 
 
 DOCBUDDY_JS_FILES = [
-    "docbuddy-core.js",
-    "docbuddy-chat.js",
-    "docbuddy-settings.js",
-    "docbuddy-workflow.js",
-    "docbuddy-plugin.js",
+    "core.js",
+    "chat.js",
+    "settings.js",
+    "workflow.js",
+    "plugin.js",
 ]
 
 def get_all_plugin_js(client):
@@ -67,12 +67,11 @@ def test_docs_returns_html():
 
 
 def test_docs_contains_plugin_scripts():
-    """The docs page HTML should reference the docbuddy plugin JS files and layout."""
+    """The docs page HTML should reference the docbuddy plugin JS files."""
     client = TestClient(make_app())
     html = client.get("/docs").text
-    assert "docbuddy-core.js" in html
-    assert "docbuddy-plugin.js" in html
-    assert "llm-layout-plugin.js" in html
+    assert "core.js" in html
+    assert "plugin.js" in html
 
 
 def test_docs_contains_swagger_bundle():
@@ -87,7 +86,6 @@ def test_static_files_served():
     client = TestClient(make_app())
     for f in DOCBUDDY_JS_FILES:
         assert client.get(f"/docbuddy-static/{f}").status_code == 200
-    assert client.get("/docbuddy-static/llm-layout-plugin.js").status_code == 200
 
 
 def test_custom_docs_url():
@@ -355,7 +353,7 @@ def test_fetch_openapi_schema_in_chat_panel():
     html = client.get("/docs").text
 
     # Check that the JavaScript includes OpenAPI schema fetching
-    assert "fetchOpenApiSchema" in html or "docbuddy-core.js" in html
+    assert "fetchOpenApiSchema" in html or "core.js" in html
 
     # Check that the JS files contain schema storage logic
     js_content = get_all_plugin_js(client)
@@ -598,9 +596,9 @@ def test_layout_plugin_tabs():
     """Verify LLM layout plugin has tab navigation."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
-    assert "LLMLayoutPlugin" in js_content
+    assert "DocBuddyPlugin" in js_content
     # Should have API, Chat, Settings tabs
     assert "api" in js_content.lower()
     assert "chat" in js_content.lower()
@@ -611,7 +609,7 @@ def test_tab_persistence():
     """Verify active tab preference is persisted."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "docbuddy-active-tab" in js_content
 
@@ -719,14 +717,12 @@ def test_template_script_order():
 
     # Swagger UI bundle should load first
     swagger_idx = html.find("swagger-ui-bundle")
-    docbuddy_core_idx = html.find("docbuddy-core.js")
-    docbuddy_plugin_idx = html.find("docbuddy-plugin.js")
-    llm_layout_idx = html.find("llm-layout-plugin.js")
+    core_idx = html.find("core.js")
+    plugin_idx = html.find("plugin.js")
 
     assert swagger_idx > 0
-    assert docbuddy_core_idx > swagger_idx
-    assert docbuddy_plugin_idx > docbuddy_core_idx
-    assert llm_layout_idx > docbuddy_plugin_idx
+    assert core_idx > swagger_idx
+    assert plugin_idx > core_idx
 
 
 # ── Layout plugin tests ────────────────────────────────────────────────────────
@@ -736,16 +732,16 @@ def test_layout_plugin_imports():
     """Verify layout plugin imports correctly."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
-    assert "window.LLMLayoutPlugin" in js_content
+    assert "window.DocBuddyPlugin" in js_content
 
 
 def test_base_layout_wrapper():
     """Verify layout plugin wraps BaseLayout."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "BaseLayout" in js_content
 
@@ -754,7 +750,7 @@ def test_llm_docs_layout_component():
     """Verify LLMDocsLayout component exists."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "LLMDocsLayout" in js_content
 
@@ -763,7 +759,7 @@ def test_chat_height_calculation():
     """Verify chat tab has proper height calculation."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "calc(100vh" in js_content or "height:" in js_content.lower()
 
@@ -775,7 +771,7 @@ def test_workflow_tab_in_layout():
     """Verify layout plugin has Workflow tab."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "workflow" in js_content.lower()
     assert "WorkflowPanel" in js_content
@@ -929,7 +925,7 @@ def test_api_tab_scroll_not_constrained():
     """Verify API tab does not have overscrollBehavior contain that blocks scrolling."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     # API tab should not have fixed height or overscroll contain
     assert 'isContained ? "contain" : "auto"' in js_content
@@ -1013,7 +1009,7 @@ def test_synthesizer_tab_not_in_layout():
     """Verify layout plugin does NOT have a Synthesizer tab."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "SynthesizerPanel" not in js_content
     assert "synthesizer" not in js_content.lower()
@@ -1033,7 +1029,7 @@ def test_remaining_tabs_present():
     """Verify API, Chat, Workflow, and Settings tabs are still present."""
     client = TestClient(make_app())
 
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert '"api"' in js_content
     assert '"chat"' in js_content
@@ -1047,7 +1043,7 @@ def test_remaining_tabs_present():
 def test_chat_tab_css_persistence():
     """Verify Chat tab uses CSS display hiding to persist across tab switches."""
     client = TestClient(make_app())
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     # Should use display-based hiding for ChatPanel, not conditional rendering
     assert 'display: activeTab === "chat"' in js_content
@@ -1058,7 +1054,7 @@ def test_chat_tab_css_persistence():
 def test_workflow_tab_css_persistence():
     """Verify Workflow tab uses CSS display hiding to persist across tab switches."""
     client = TestClient(make_app())
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     # Should use display-based hiding for WorkflowPanel
     assert 'display: activeTab === "workflow"' in js_content
@@ -1069,7 +1065,7 @@ def test_workflow_tab_css_persistence():
 def test_chat_scroll_on_tab_return():
     """Verify scrolling to bottom when returning to chat tab."""
     client = TestClient(make_app())
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "llm-chat-messages" in js_content
     assert "scrollHeight" in js_content
@@ -1094,7 +1090,7 @@ def test_chat_cancel_token_cleanup():
 def test_chat_streaming_indicator_in_layout():
     """Verify layout plugin shows streaming indicator on chat tab."""
     client = TestClient(make_app())
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "chatStreaming" in js_content
     assert "docbuddy-chat-streaming" in js_content
@@ -1104,7 +1100,7 @@ def test_chat_streaming_indicator_in_layout():
 def test_workflow_streaming_indicator_in_layout():
     """Verify layout plugin shows streaming indicator on workflow tab."""
     client = TestClient(make_app())
-    js_content = client.get("/docbuddy-static/llm-layout-plugin.js").text
+    js_content = client.get("/docbuddy-static/plugin.js").text
 
     assert "workflowStreaming" in js_content
     assert "docbuddy-workflow-streaming" in js_content

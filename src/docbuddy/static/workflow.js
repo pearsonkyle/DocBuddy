@@ -1,5 +1,5 @@
 // DocBuddy Workflow Panel — Multi-step AI workflow builder with tool calling
-// Depends on: docbuddy-core.js (window.DocBuddy)
+// Depends on: core.js (window.DocBuddy)
 
 (function () {
   "use strict";

@@ -1,5 +1,5 @@
 // DocBuddy Chat Panel — Chat interface with SSE streaming and tool calling
-// Depends on: docbuddy-core.js (window.DocBuddy)
+// Depends on: core.js (window.DocBuddy)
 
 (function () {
   "use strict";
