@@ -11,7 +11,6 @@
 - 🔗 Tool-calling for API Requests
 - 🎨 Dark/light theme support
 
-
 ## Installation
 
 ```bash
@@ -30,16 +29,6 @@ setup_docs(app)  # replaces default /docs
 
 That's it! Visit `/docs`
 
-## Configure LLM Settings
-
-- **Provider**: Choose your local LLM provider (Ollama, LM Studio, vLLM, or Custom)
-- **API URL**: Enter the API endpoint for your LLM (e.g. `http://localhost:1234/v1` for LMStudio)
-- **Test Connection**: Verify that the plugin can connect to your LLM provider and select a model from the drop down after.
-
-Some local LLM providers will require users to enable CORS in their API settings to allow the plugin to connect from the browser.
-
-![](examples/lmstudio_cors.png)
-
 ## Using the Chat Assistant
 
 Ask questions like:
@@ -51,12 +40,15 @@ Users can enable tool calling in the settings to allow the assistant to make API
 
 ![](examples/tools.png)
 
-## Development
+## Configure LLM Settings
 
-```bash
-pip install -e ".[dev]"
-pytest tests/
-```
+- **Provider**: Choose your local LLM provider (Ollama, LM Studio, vLLM, or Custom)
+- **API URL**: Enter the API endpoint for your LLM (e.g. `http://localhost:1234/v1` for LMStudio)
+- **Test Connection**: Verify that the plugin can connect to your LLM provider and select a model from the drop down after.
+
+Some local LLM providers will require users to enable CORS in their API settings to allow the plugin to connect from the browser.
+
+![](examples/lmstudio_cors.png)
 
 ## Demo Server
 
@@ -64,9 +56,9 @@ pytest tests/
 uvicorn examples.demo_server:app --reload --host 0.0.0.0 --port 3333
 ```
 
-## Future Developments
+## Development
 
-- More LLM providers (Azure, Hugging Face, etc.)
-- Support for reasoning chains in chat and workflow
-- Update styling for Authenticated API and authorize button in /docs page
-- Support for other web frameworks like Flask, Django, etc.
+```bash
+pip install -e ".[dev]"
+pytest tests/
+```
