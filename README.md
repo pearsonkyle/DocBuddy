@@ -36,7 +36,7 @@ Ask questions like:
   - "Create a curl cmd for adding a new user"
   - "Ping health"
 
-Users can enable tool calling in the settings to allow the assistant to make API requests on your behalf. This allows for more interactive and dynamic conversations with the assistant.
+Enable tool calling in the settings to allow the assistant to make API requests on your behalf. 
 
 ![](examples/tools.png)
 
