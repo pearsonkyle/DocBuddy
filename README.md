@@ -33,8 +33,8 @@ That's it! Visit `/docs`
 
 Ask questions like:
   - "What endpoints are available?"
-  - "Show me how to use /users"
-  - "Generate a curl command for /health"
+  - "Create a curl cmd for adding a new user"
+  - "Ping health"
 
 Users can enable tool calling in the settings to allow the assistant to make API requests on your behalf. This allows for more interactive and dynamic conversations with the assistant.
 
