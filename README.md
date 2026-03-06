@@ -1,7 +1,11 @@
 # Documentation Buddy
 
 [![CI](https://github.com/pearsonkyle/swagger-llm-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/pearsonkyle/swagger-llm-ui/actions/workflows/ci.yml)
-
+[![PyPI version](https://badge.fury.io/py/docbuddy.svg)](https://badge.fury.io/py/docbuddy)
+[![Python versions](https://img.shields.io/pypi/pyversions/docbuddy.svg)](https://pypi.org/project/docbuddy/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Downloads](https://static.pepy.tech/badge/docbuddy)](https://pepy.tech/project/docbuddy)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
 
 > Add an AI assistant to your `/docs` page.
 
