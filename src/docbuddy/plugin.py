@@ -41,14 +41,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
-        # Content Security Policy - allows same-origin and localhost for LLM connections
+        # Content Security Policy - allows same-origin and any HTTP/HTTPS for LLM connections
+        # http: and https: scheme sources are required because users configure arbitrary
+        # LLM server addresses (local network IPs, Tailscale nodes, etc.)
         csp = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; "
             "img-src 'self' data:; "
             "font-src 'self' data:; "
-            f"connect-src 'self' {request.url.hostname}:* http://localhost:* https:;"
+            "connect-src 'self' http: https:;"
         )
 
         response.headers["Content-Security-Policy"] = csp
