@@ -47,6 +47,7 @@
       var LLMSettingsPanel = system.getComponent("LLMSettingsPanel", true);
       var ChatPanel = system.getComponent("ChatPanel", true);
       var WorkflowPanel = system.getComponent("WorkflowPanel", true);
+      var AgentPanel = system.getComponent("AgentPanel", true);
 
       // Get saved tab preference, default to "api"
       var savedTab = localStorage.getItem(TAB_STORAGE_KEY) || "api";
@@ -76,14 +77,17 @@
         localStorage.setItem(TAB_STORAGE_KEY, activeTab);
       }, [activeTab]);
 
-      // When switching back to chat, scroll to bottom to show any messages streamed in background
+      // When switching back to chat or agent, scroll to bottom to show any messages streamed in background
       React.useEffect(function () {
-        if (activeTab === "chat") {
-          requestAnimationFrame(function () {
-            var el = document.getElementById('llm-chat-messages');
-            if (el) el.scrollTop = el.scrollHeight;
-          });
-        }
+        requestAnimationFrame(function () {
+          if (activeTab === "chat") {
+            var chatEl = document.getElementById('llm-chat-messages');
+            if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+          } else if (activeTab === "agent") {
+            var agentEl = document.getElementById('llm-agent-messages');
+            if (agentEl) agentEl.scrollTop = agentEl.scrollHeight;
+          }
+        });
       }, [activeTab]);
 
       // Track whether chat is actively streaming (for tab indicator)
@@ -116,7 +120,22 @@
         };
       }, []);
 
-      // Tab styles for 3 tabs (theme-aware)
+      // Track whether agent is actively streaming (for tab indicator)
+      var _agentStreamState = React.useState(false);
+      var agentStreaming = _agentStreamState[0];
+      var setAgentStreaming = _agentStreamState[1];
+
+      React.useEffect(function () {
+        var handler = function (e) {
+          setAgentStreaming(e.detail && e.detail.streaming);
+        };
+        window.addEventListener('docbuddy-agent-streaming', handler);
+        return function () {
+          window.removeEventListener('docbuddy-agent-streaming', handler);
+        };
+      }, []);
+
+      // Tab styles for all main DocBuddy tabs (theme-aware)
       var tabStyle = function (tab) {
         return {
           background: activeTab === tab ? "var(--theme-primary)" : "var(--theme-secondary)",
@@ -130,8 +149,8 @@
         };
       };
 
-      // Content area style - full height for chat, settings, and workflow
-      var isContained = activeTab === "chat" || activeTab === "settings" || activeTab === "workflow";
+      // Content area style - full height for chat, settings, workflow, and agent
+      var isContained = activeTab === "chat" || activeTab === "settings" || activeTab === "workflow" || activeTab === "agent";
       var contentStyle = {
         border: "1px solid var(--theme-border-color)",
         borderTop: "none",
@@ -139,7 +158,7 @@
         background: "var(--theme-header-bg)",
         height: isContained ? "calc(100vh - 120px)" : "auto",
         minHeight: isContained ? "400px" : "auto",
-        overflow: isContained ? (activeTab === "chat" ? "hidden" : "auto") : "auto",
+        overflow: isContained ? (activeTab === "chat" || activeTab === "agent" ? "hidden" : "auto") : "auto",
         flex: isContained ? "none" : "1 1 auto",
         overscrollBehavior: isContained ? "contain" : "auto",
         WebkitOverflowScrolling: "touch",
@@ -211,6 +230,27 @@
                   })
                 : null
             ),
+            // Agent tab
+            React.createElement(
+              "button",
+              { role: "tab", "aria-selected": activeTab === "agent", onClick: function () { setActiveTab("agent"); }, style: tabStyle("agent") },
+              "Agent",
+              agentStreaming && activeTab !== "agent"
+                ? React.createElement("span", {
+                    style: {
+                      display: "inline-block",
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      background: "#f59e0b",
+                      marginLeft: "6px",
+                      animation: "docbuddy-pulse 1.4s infinite ease-in-out",
+                      verticalAlign: "middle"
+                    },
+                    title: "Agent streaming in progress"
+                  })
+                : null
+            ),
             // Settings tab
             React.createElement(
               "button",
@@ -237,6 +277,11 @@
             React.createElement(ErrorBoundary, null, React.createElement(WorkflowPanel, null))
           ),
 
+          // Agent tab content (always mounted, hidden via CSS to preserve streaming state across tab switches)
+          React.createElement("div", { style: { display: activeTab === "agent" ? "block" : "none", height: "100%" } },
+            React.createElement(ErrorBoundary, null, React.createElement(AgentPanel, null))
+          ),
+
           // LLM Settings tab content (always mounted, hidden via CSS to preserve state across tab switches)
           React.createElement("div", { style: { display: activeTab === "settings" ? "block" : "none", height: "100%", overflow: "auto" } },
             React.createElement(ErrorBoundary, null, React.createElement(LLMSettingsPanel, null))
@@ -257,6 +302,7 @@
         LLMSettingsPanel: DB.LLMSettingsPanelFactory(system),
         ChatPanel: DB.ChatPanelFactory(system),
         WorkflowPanel: DB.WorkflowPanelFactory(system),
+        AgentPanel: DB.AgentPanelFactory(system),
         LLMDocsLayout: LLMDocsLayout,
       },
     };

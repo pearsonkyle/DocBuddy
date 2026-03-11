@@ -483,6 +483,7 @@
   var CHAT_HISTORY_KEY = "docbuddy-chat-history";
   var TOOL_SETTINGS_KEY = "docbuddy-tool-settings";
   var WORKFLOW_STORAGE_KEY = 'docbuddy-workflow';
+  var AGENT_HISTORY_KEY = 'docbuddy-agent-history';
 
   // ── In-memory cache for OpenAPI schema ────────────────────────────────────
   DocBuddy._cachedOpenapiSchema = null;
@@ -641,6 +642,26 @@
     };
   }
   DocBuddy.createDefaultBlock = createDefaultBlock;
+
+  // ── Agent storage helpers ──────────────────────────────────────────────────
+  function loadAgentHistory() {
+    try {
+      var raw = localStorage.getItem(AGENT_HISTORY_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  DocBuddy.loadAgentHistory = loadAgentHistory;
+
+  function saveAgentHistory(messages) {
+    try {
+      localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify(messages.slice(-30)));
+    } catch (e) {
+      // ignore
+    }
+  }
+  DocBuddy.saveAgentHistory = saveAgentHistory;
 
   // ── Action types ────────────────────────────────────────────────────────────
   var SET_BASE_URL = "LLM_SET_BASE_URL";
