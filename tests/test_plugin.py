@@ -1768,7 +1768,7 @@ def test_standalone_page_has_example_links():
     from pathlib import Path
 
     html = (Path(__file__).parent.parent / "docs" / "index.html").read_text()
-    assert "petstore" in html.lower()
+    assert "stablehorde" in html.lower()
     assert "loadUrl" in html
 
 
