@@ -901,46 +901,9 @@
         var agentHistory = this.state.agentHistory || [];
         var isPlan = this.state.mode === 'plan';
 
-        // Mode toggle bar
-        var modeToggle = React.createElement(
-          "div",
-          {
-            style: {
-              display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
-              borderBottom: '1px solid var(--theme-border-color)', background: 'var(--theme-panel-bg)',
-              flexShrink: 0,
-            }
-          },
-          React.createElement("span", {
-            style: { fontSize: '12px', color: 'var(--theme-text-secondary)', fontWeight: '500' }
-          }, "Mode:"),
-          React.createElement("button", {
-            onClick: this.toggleMode,
-            disabled: this.state.isTyping,
-            style: {
-              background: isPlan ? '#3b82f6' : '#f59e0b',
-              color: '#fff', border: 'none', borderRadius: '12px',
-              padding: '4px 14px', cursor: this.state.isTyping ? 'not-allowed' : 'pointer',
-              fontSize: '12px', fontWeight: '600', transition: 'all 0.2s ease',
-              opacity: this.state.isTyping ? 0.6 : 1,
-            }
-          }, isPlan ? "📋 Plan" : "⚡ Act"),
-          React.createElement("span", {
-            style: { fontSize: '11px', color: 'var(--theme-text-secondary)', fontStyle: 'italic' }
-          }, isPlan ? "Clarify & plan before executing" : "Autonomous tool execution"),
-          this.state.iterationCount > 0 ? React.createElement("span", {
-            style: {
-              fontSize: '10px', color: 'var(--theme-text-secondary)',
-              marginLeft: 'auto', background: 'var(--theme-secondary)',
-              padding: '2px 8px', borderRadius: '8px',
-            }
-          }, "Iterations: " + this.state.iterationCount + "/" + MAX_AGENT_ITERATIONS) : null
-        );
-
         return React.createElement(
           "div",
           { className: "llm-chat-container", style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: '300px' } },
-          modeToggle,
           React.createElement(
             "div",
             { id: "llm-agent-messages", style: { flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px', scrollBehavior: 'smooth' } },
@@ -1002,7 +965,24 @@
               ),
               React.createElement(
                 "div",
-                { style: { display: 'flex', gap: '8px' } },
+                { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+                this.state.iterationCount > 0 ? React.createElement("span", {
+                  style: {
+                    fontSize: '10px', color: 'var(--theme-text-secondary)',
+                    background: 'var(--theme-secondary)', padding: '2px 8px', borderRadius: '8px',
+                  }
+                }, "Iter: " + this.state.iterationCount + "/" + MAX_AGENT_ITERATIONS) : null,
+                React.createElement("button", {
+                  onClick: this.toggleMode,
+                  disabled: this.state.isTyping,
+                  style: {
+                    background: isPlan ? '#3b82f6' : '#f59e0b',
+                    color: '#fff', border: 'none', borderRadius: '6px',
+                    padding: '8px 16px', cursor: this.state.isTyping ? 'not-allowed' : 'pointer',
+                    fontSize: '12px', fontWeight: '500', transition: 'all 0.2s ease',
+                    opacity: this.state.isTyping ? 0.6 : 1,
+                  }
+                }, isPlan ? "📋 Plan" : "⚡ Act"),
                 this.state.isTyping && React.createElement(
                   "button",
                   {
