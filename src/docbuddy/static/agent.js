@@ -6,6 +6,11 @@
 
   var DB = window.DocBuddy;
 
+  // ── Constants ─────────────────────────────────────────────────────────────
+  var MAX_TOOL_CALL_RETRIES = 3;
+  var MAX_AGENT_ITERATIONS = 5;
+  var MAX_TOOL_RESPONSE_LENGTH = 4000;
+
   // ── Agent panel component ─────────────────────────────────────────────────
   function AgentPanelFactory(system) {
     var React = system.React;
@@ -236,14 +241,14 @@
         var self = this;
         var s = this.state;
 
-        if (s.toolRetryCount >= 3) {
+        if (s.toolRetryCount >= MAX_TOOL_CALL_RETRIES) {
           var lastError = 'Status ' + responseObj.status + ' ' + (responseObj.statusText || '');
           var lastBody = (responseObj.body || '').substring(0, 500);
           var errorDetail = lastError + (lastBody ? '\n\n```\n' + lastBody + '\n```' : '');
           console.error('[Agent Tool Call] Max retries reached.');
           self.addMessage({
             role: 'assistant',
-            content: 'Max tool call retries (3) reached. Last error: ' + errorDetail + '\n\nPlease try a different approach.',
+            content: 'Max tool call retries (' + MAX_TOOL_CALL_RETRIES + ') reached. Last error: ' + errorDetail + '\n\nPlease try a different approach.',
             messageId: DB.generateMessageId()
           });
           self.setState({ pendingToolCall: null, isTyping: false });
@@ -252,7 +257,7 @@
 
         var toolCallId = s.pendingToolCall ? s.pendingToolCall.id : 'call_unknown';
 
-        var truncatedBody = (responseObj.body || '').substring(0, 4000);
+        var truncatedBody = (responseObj.body || '').substring(0, MAX_TOOL_RESPONSE_LENGTH);
         var resultContent = 'Status: ' + responseObj.status + ' ' + (responseObj.statusText || '') + '\n\n' + truncatedBody;
 
         var toolResultMsg = {
@@ -343,7 +348,7 @@
         if (self.state.mode === 'plan') {
           systemPrompt += "\n\nYou are currently in PLAN mode. Focus on understanding the user's request, asking clarification questions if needed, and proposing a clear step-by-step plan. Do NOT execute tools yet — wait for the user to switch to Act mode or approve the plan.";
         } else {
-          systemPrompt += "\n\nYou are currently in ACT mode. Execute the plan using available tools. Be autonomous — call tools, process results, and iterate until the task is complete. Signal each step clearly. Current iteration: " + (self.state.iterationCount + 1) + "/5.";
+          systemPrompt += "\n\nYou are currently in ACT mode. Execute the plan using available tools. Be autonomous — call tools, process results, and iterate until the task is complete. Signal each step clearly. Current iteration: " + (self.state.iterationCount + 1) + "/" + MAX_AGENT_ITERATIONS + ".";
         }
 
         if (toolSettings.enableTools) {
@@ -929,7 +934,7 @@
               marginLeft: 'auto', background: 'var(--theme-secondary)',
               padding: '2px 8px', borderRadius: '8px',
             }
-          }, "Iterations: " + this.state.iterationCount + "/5") : null
+          }, "Iterations: " + this.state.iterationCount + "/" + MAX_AGENT_ITERATIONS) : null
         );
 
         return React.createElement(
