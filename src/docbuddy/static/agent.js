@@ -8,7 +8,7 @@
 
   // ── Constants ─────────────────────────────────────────────────────────────
   var MAX_TOOL_CALL_RETRIES = 3;
-  var MAX_AGENT_ITERATIONS = 20;
+  var MAX_AGENT_ITERATIONS = 5;
   var MAX_TOOL_RESPONSE_LENGTH = 4000;
 
   // ── Agent panel component ─────────────────────────────────────────────────
@@ -288,6 +288,7 @@
             messageId: DB.generateMessageId()
           });
           self.setState({ pendingToolCall: null, pendingToolCallQueue: [], isTyping: false });
+          window.dispatchEvent(new CustomEvent('docbuddy-agent-streaming', { detail: { streaming: false } }));
           return;
         }
 
@@ -341,7 +342,7 @@
             toolCallResponse: null,
           }, function() {
             var toolSettings = DB.loadToolSettings();
-            if (toolSettings.autoExecute || self.state.mode === 'act') {
+            if (self.state.mode === 'act' && toolSettings.autoExecute) {
               self.handleExecuteToolCall();
             }
           });
@@ -626,7 +627,7 @@
                           toolCallResponse: null,
                         }, function() {
                           var toolSettings = DB.loadToolSettings();
-                          if (toolSettings.autoExecute || self.state.mode === 'act') {
+                          if (toolSettings.autoExecute && self.state.mode === 'act') {
                             self.handleExecuteToolCall();
                           }
                         });

@@ -135,7 +135,7 @@
         };
       }, []);
 
-      // Tab styles for 3 tabs (theme-aware)
+      // Tab styles for all main DocBuddy tabs (theme-aware)
       var tabStyle = function (tab) {
         return {
           background: activeTab === tab ? "var(--theme-primary)" : "var(--theme-secondary)",
