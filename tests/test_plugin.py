@@ -15,6 +15,7 @@ DOCBUDDY_JS_FILES = [
     "chat.js",
     "settings.js",
     "workflow.js",
+    "agent.js",
     "plugin.js",
 ]
 
@@ -1480,3 +1481,182 @@ def test_favicon_served():
     client = TestClient(make_app())
     response = client.get("/docbuddy-static/favicon.ico")
     assert response.status_code == 200
+
+
+# ── Agent tab tests ──────────────────────────────────────────────────────────
+
+
+def test_agent_js_served():
+    """agent.js must be accessible from /docbuddy-static/."""
+    client = TestClient(make_app())
+    response = client.get("/docbuddy-static/agent.js")
+    assert response.status_code == 200
+    assert "AgentPanelFactory" in response.text
+
+
+def test_agent_tab_in_layout():
+    """Verify Agent tab is present in the layout plugin."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/plugin.js").text
+
+    assert '"agent"' in js_content
+    assert "AgentPanel" in js_content
+
+
+def test_agent_tab_css_persistence():
+    """Verify Agent tab uses CSS display hiding to persist across tab switches."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/plugin.js").text
+
+    assert 'display: activeTab === "agent"' in js_content
+
+
+def test_agent_panel_included():
+    """Verify AgentPanel component is registered in DocBuddyPlugin."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/plugin.js").text
+
+    assert "AgentPanel: DB.AgentPanelFactory(system)" in js_content
+
+
+def test_agent_streaming_indicator_in_layout():
+    """Verify layout plugin shows streaming indicator on agent tab."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/plugin.js").text
+
+    assert "agentStreaming" in js_content
+    assert "docbuddy-agent-streaming" in js_content
+
+
+def test_agent_dispatches_streaming_events():
+    """Verify AgentPanel dispatches streaming state events."""
+    client = TestClient(make_app())
+    js_content = get_all_plugin_js(client)
+
+    assert "docbuddy-agent-streaming" in js_content
+
+
+def test_agent_history_storage_key():
+    """Verify correct localStorage key for agent history."""
+    client = TestClient(make_app())
+    js_content = get_all_plugin_js(client)
+
+    assert "docbuddy-agent-history" in js_content
+
+
+def test_agent_mode_toggle():
+    """Verify agent panel has plan/act mode toggle."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "toggleMode" in js_content
+    assert '"plan"' in js_content
+    assert '"act"' in js_content
+
+
+def test_agent_plan_mode_context():
+    """Verify agent sends plan mode context to LLM."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "PLAN mode" in js_content
+    assert "ACT mode" in js_content
+
+
+def test_agent_iteration_tracking():
+    """Verify agent tracks iteration count."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "iterationCount" in js_content
+    assert "Iterations:" in js_content
+
+
+def test_agent_tool_calling_in_act_mode():
+    """Verify agent only enables tools in act mode."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "mode === 'act'" in js_content
+
+
+def test_agent_cancel_support():
+    """Verify agent panel supports cancel via AbortController."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "handleCancel" in js_content
+    assert "AbortController" in js_content
+    assert "Cancel" in js_content
+
+
+def test_agent_clear_history():
+    """Verify agent panel has clear history function."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "clearHistory" in js_content
+    assert "saveAgentHistory" in js_content
+
+
+def test_agent_export_button():
+    """Verify agent panel has export button."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "Export" in js_content
+    assert "exportAsJson" in js_content
+
+
+def test_agent_system_prompt_preset():
+    """Verify agent system prompt preset exists in config."""
+    client = TestClient(make_app())
+    response = client.get("/docbuddy-static/system-prompt-config.json")
+    assert response.status_code == 200
+
+    import json
+
+    config = json.loads(response.text)
+    assert "agent" in config["presets"]
+    assert config["presets"]["agent"]["name"] == "Agent"
+    assert "Autonomous" in config["presets"]["agent"]["description"]
+
+
+def test_agent_tool_call_panel():
+    """Verify agent has tool call editing panel."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "renderToolCallPanel" in js_content
+    assert "handleExecuteToolCall" in js_content
+    assert "editMethod" in js_content
+    assert "editPath" in js_content
+
+
+def test_agent_template_script_included():
+    """Verify agent.js is loaded in the HTML template."""
+    client = TestClient(make_app())
+    html = client.get("/docs").text
+
+    assert "agent.js" in html
+
+
+def test_agent_uses_shared_namespace():
+    """Verify agent.js uses the DocBuddy shared namespace pattern."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/agent.js").text
+
+    assert "window.DocBuddy" in js_content
+    assert "DB.AgentPanelFactory" in js_content
+
+
+def test_all_tabs_present():
+    """Verify all 5 tabs (API, Chat, Workflow, Agent, Settings) are present."""
+    client = TestClient(make_app())
+    js_content = client.get("/docbuddy-static/plugin.js").text
+
+    assert '"api"' in js_content
+    assert '"chat"' in js_content
+    assert '"workflow"' in js_content
+    assert '"agent"' in js_content
+    assert '"settings"' in js_content
