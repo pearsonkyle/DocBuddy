@@ -386,6 +386,33 @@ Users can customize colors via the Settings panel. Colors are persisted to local
 
 ---
 
+## CI/CD Pipeline
+
+### GitHub Actions Workflows
+
+| Workflow | Purpose |
+|----------|---------|
+| `ci.yml` | Lint (pre-commit, ruff, mypy) and test on Python 3.9-3.12 with coverage |
+| `release.yml` | Auto-publish to PyPI on version tags with release notes |
+| `publish-to-pypi.yml` | Manual dispatch to publish to PyPI (legacy) |
+| `publish-to-testpypi.yml` | Manual dispatch to publish to TestPyPI (legacy) |
+
+### CI Features
+- **4 Python versions tested**: 3.9, 3.10, 3.11, 3.12
+- **Test coverage reporting** with Codecov integration
+- **Security scanning** using Bandit (static analysis)
+- **Dependency review** on pull requests
+- **Documentation verification** on every PR
+
+### Release Process
+1. Tag commit with `vX.Y.Z` (semantic versioning)
+2. CI validates version and builds package
+3. Tests publish to TestPyPI first (optional)
+4. Package uploads to PyPI automatically
+5. GitHub Release created with changelog
+
+---
+
 ## Additional Resources
 
 - **PyPI**: https://pypi.org/project/docbuddy/
