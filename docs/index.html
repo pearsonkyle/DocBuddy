@@ -413,7 +413,7 @@
         </p>
         <p class="error-msg" id="error-msg"></p>
 
-        <div class="or-divider">or try an example</div>
+        <div class="or-divider"></div>
 
         <div class="examples">
           <h3>Example APIs</h3>
@@ -492,11 +492,16 @@ app = <span class="fn">FastAPI</span>()
       window.DOCBUDDY_STATIC_BASE = DOCBUDDY_BASE;
       window.DOCBUDDY_VERSION = 'standalone';
 
-      // Dynamically load DocBuddy JS files from the resolved base
+      // Load DocBuddy JS files sequentially (avoids parser-blocking document.write warnings)
       var scripts = ['core.js', 'chat.js', 'settings.js', 'workflow.js', 'agent.js', 'plugin.js'];
-      scripts.forEach(function(name) {
-        document.write('<script src="' + DOCBUDDY_BASE + '/' + name + '"><\/script>');
-      });
+      (function loadNext(i) {
+        if (i >= scripts.length) return;
+        var s = document.createElement('script');
+        s.src = DOCBUDDY_BASE + '/' + scripts[i];
+        s.onload = function() { loadNext(i + 1); };
+        s.onerror = function() { console.error('Failed to load ' + scripts[i]); loadNext(i + 1); };
+        document.body.appendChild(s);
+      })(0);
     </script>
 
     <script>
@@ -567,6 +572,7 @@ app = <span class="fn">FastAPI</span>()
           window.DocBuddy._cachedOpenapiSchema = null;
           window.DocBuddy._openapiSchemaFetchPromise = null;
           window.DocBuddy._schemaFetchUrl = null;
+          window.DocBuddy._schemaFetchFailed = false;
           // Prime the cache with the already-fetched schema to avoid a redundant fetch
           if (prefetchedSchema) {
             window.DocBuddy._cachedOpenapiSchema = prefetchedSchema;

@@ -29,9 +29,11 @@
   // ── System Prompt Preset Configuration (load from JSON) ───────────────────
   var SYSTEM_PROMPT_CONFIG = null;
   var _systemPromptConfigPromise = null;
+  var _systemPromptConfigFailed = false;
 
   function loadSystemPromptConfig() {
     if (SYSTEM_PROMPT_CONFIG) return SYSTEM_PROMPT_CONFIG;
+    if (_systemPromptConfigFailed) return DEFAULT_SYSTEM_PROMPT_CONFIG;
 
     // Start async fetch if not already in progress
     if (!_systemPromptConfigPromise) {
@@ -49,6 +51,7 @@
           console.warn('Failed to load system-prompt-config.json, using inline defaults:', err);
           // Use inline default config when fetch fails (GitHub Pages, CDN issues)
           SYSTEM_PROMPT_CONFIG = DEFAULT_SYSTEM_PROMPT_CONFIG;
+          _systemPromptConfigFailed = true;
           _systemPromptConfigPromise = Promise.resolve(SYSTEM_PROMPT_CONFIG);
           return SYSTEM_PROMPT_CONFIG;
         });
@@ -79,6 +82,7 @@
    */
   function ensureSystemPromptConfig() {
     if (SYSTEM_PROMPT_CONFIG) return Promise.resolve(SYSTEM_PROMPT_CONFIG);
+    if (_systemPromptConfigFailed) return Promise.resolve(DEFAULT_SYSTEM_PROMPT_CONFIG);
     if (_systemPromptConfigPromise) return _systemPromptConfigPromise;
     // Kick off loading
     loadSystemPromptConfig();
@@ -591,6 +595,7 @@
   DocBuddy._cachedOpenapiSchema = null;
   DocBuddy._openapiSchemaFetchPromise = null;
   DocBuddy._schemaFetchUrl = null;
+  DocBuddy._schemaFetchFailed = false;
 
   function ensureOpenapiSchemaCached(onDone) {
     var targetUrl = window.DOCBUDDY_OPENAPI_URL || "/openapi.json";
@@ -603,12 +608,21 @@
       // URL changed — invalidate stale cache
       DocBuddy._cachedOpenapiSchema = null;
       DocBuddy._openapiSchemaFetchPromise = null;
+      DocBuddy._schemaFetchFailed = false;
+    }
+    // Negative cache: if a previous fetch for this URL failed, don't retry
+    if (DocBuddy._schemaFetchFailed && DocBuddy._schemaFetchUrl === targetUrl) {
+      return;
     }
     if (!DocBuddy._openapiSchemaFetchPromise) {
       var fetchUrl = targetUrl;
       DocBuddy._schemaFetchUrl = fetchUrl;
+      DocBuddy._schemaFetchFailed = false;
       DocBuddy._openapiSchemaFetchPromise = fetch(fetchUrl)
-        .then(function(res) { return res.json(); })
+        .then(function(res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
         .then(function(schema) {
           // Only cache if this fetch is still current (prevents race conditions)
           if (DocBuddy._schemaFetchUrl === fetchUrl) {
@@ -619,6 +633,7 @@
         })
         .catch(function(err) {
           if (DocBuddy._schemaFetchUrl === fetchUrl) {
+            DocBuddy._schemaFetchFailed = true;
             DocBuddy._openapiSchemaFetchPromise = null;
           }
           console.warn('Failed to fetch OpenAPI schema:', err);
