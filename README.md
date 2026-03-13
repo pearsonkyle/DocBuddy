@@ -60,22 +60,9 @@ Enable tool calling in the settings to allow the assistant to make API requests 
 After installing DocBuddy, use the `docbuddy` command to launch the standalone webpage:
 
 ```bash
-pip install docbuddy
-docbuddy
-```
-
-This starts a local server on port **8008** and opens your browser to `http://localhost:8008/standalone.html`.
-
-#### Custom Host/Port
-
-Use `--host` and `--port` options to customize the server:
-
-```bash
 docbuddy --port 9000
 docbuddy -p 8080 --host 127.0.0.1
 ```
-
-Run `docbuddy --help` for more information.
 
 ### Option 2: Manual Local Server
 
