@@ -17,7 +17,13 @@
 pip install docbuddy
 ```
 
-## Quick Start
+access the standalone page by running the following command:
+
+```bash
+docbuddy --port 9000
+```
+
+## Python Integration
 
 ```python
 from fastapi import FastAPI
@@ -55,24 +61,12 @@ Enable tool calling in the settings to allow the assistant to make API requests 
 
 ## Standalone Mode
 
-### Option 1: Using the CLI (Recommended)
-
-After installing DocBuddy, use the `docbuddy` command to launch the standalone webpage:
-
-```bash
-docbuddy --port 9000
-docbuddy -p 8080 --host 127.0.0.1
-```
-
-### Option 2: Manual Local Server
-
 If you prefer manual control, run DocBuddy from the repo root:
 
 1. Run `python3 -m http.server 8080` from the repo root
 2. Visit in your browser [http://localhost:8080/docs/index.html](http://localhost:8080/docs/index.html)
 
 > **Note:** Due to browser security restrictions (CORS), if you want to use local LLMs (Ollama, LM Studio, vLLM), you must run DocBuddy locally instead of from the GitHub Pages hosted version.
-
 
 ## LLM Settings
 
