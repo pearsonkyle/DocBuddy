@@ -109,12 +109,15 @@
    * @returns {string} The resolved base URL with trailing slash removed
    */
   function resolveApiBaseUrl(schema) {
+    console.group('[API Base URL] Resolution');
+
     // Step 1: Check user-configured API Base URL (highest priority)
     var userConfiguredUrl = loadApiBaseUrl();
     if (userConfiguredUrl && typeof userConfiguredUrl === 'string' && userConfiguredUrl.trim()) {
       var trimmed = userConfiguredUrl.trim().replace(/\/+$/, '');
       if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        console.debug('[API Base URL] Using user-configured:', trimmed);
+        console.debug('[API Base URL] Step 1 - Using user-configured:', trimmed);
+        console.groupEnd();
         return trimmed;
       }
     }
@@ -125,7 +128,8 @@
         var serverUrl = schema.servers[i].url || '';
         // Only use absolute URLs with protocol
         if (serverUrl && (serverUrl.startsWith('http://') || serverUrl.startsWith('https://'))) {
-          console.debug('[API Base URL] Using schema servers[0]:', serverUrl.replace(/\/+$/, ''));
+          console.debug('[API Base URL] Step 2 - Using schema servers[0]:', serverUrl.replace(/\/+$/, ''));
+          console.groupEnd();
           return serverUrl.replace(/\/+$/, '');
         }
       }
@@ -134,11 +138,13 @@
       var firstServer = schema.servers[0].url;
       if (firstServer && !firstServer.startsWith('http://') && !firstServer.startsWith('https://')) {
         // Try to auto-detect from the current schema URL
-        console.debug('[API Base URL] Schema has relative server:', firstServer);
+        console.debug('[API Base URL] Step 2 - Schema has relative server:', firstServer);
         var detectedFromUrl = resolveApiBaseUrlFromSchemaUrl();
         if (detectedFromUrl) {
           // Append the relative path to the detected base
           var relativePath = firstServer.replace(/^\//, '');
+          console.debug('[API Base URL] Step 2 - Appending relative path to detected:', detectedFromUrl + '/' + relativePath);
+          console.groupEnd();
           return detectedFromUrl + '/' + relativePath;
         }
       }
@@ -147,12 +153,14 @@
     // Step 3: Auto-detect from schema URL
     var detected = resolveApiBaseUrlFromSchemaUrl();
     if (detected) {
-      console.debug('[API Base URL] Auto-detected from schema URL:', detected);
+      console.debug('[API Base URL] Step 3 - Auto-detected from schema URL:', detected);
+      console.groupEnd();
       return detected;
     }
 
     // Step 4: Fallback to page origin (for local development)
-    console.debug('[API Base URL] Using fallback (page origin):', window.location.origin);
+    console.warn('[API Base URL] Step 4 - Using fallback (page origin):', window.location.origin, '(This is likely incorrect for external schemas!)');
+    console.groupEnd();
     return window.location.origin.replace(/\/+$/, '');
   }
   DocBuddy.resolveApiBaseUrl = resolveApiBaseUrl;
@@ -186,6 +194,8 @@
       return parsed.origin + pathname.replace(/\/+$/, '');
     } catch (e) {}
 
+    // Log the error for debugging
+    console.error('[API Base URL] Failed to parse URL:', targetUrl, 'Error:', e);
     return null;
   }
 
