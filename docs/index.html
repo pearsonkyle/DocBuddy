@@ -731,6 +731,22 @@ app = <span class="fn">FastAPI</span>()
           })();
         }
 
+        // ── Monkey-patch buildCurlCommand to show full URL ────────────────
+        // The CDN-cached chat.js / agent.js render tool-call curl commands
+        // via DB.buildCurlCommand(method, path, ...) where `path` is only
+        // the relative API path (e.g. /v2/status/news).  Patch it so the
+        // displayed curl command includes the full URL.
+        if (detectedApiBase && window.DocBuddy && typeof window.DocBuddy.buildCurlCommand === 'function') {
+          var _origBuildCurl = window.DocBuddy.buildCurlCommand;
+          window.DocBuddy.buildCurlCommand = function(method, path, queryParams, pathParams, body) {
+            var fullPath = path;
+            if (window.DOCBUDDY_API_BASE_URL && path && /^\//.test(path)) {
+              fullPath = window.DOCBUDDY_API_BASE_URL.replace(/\/+$/, '') + path;
+            }
+            return _origBuildCurl(method, fullPath, queryParams, pathParams, body);
+          };
+        }
+
         // Show the UI
         document.getElementById('docbuddy-landing').style.display = 'none';
         document.getElementById('swagger-ui').style.display = 'block';

@@ -540,7 +540,14 @@
   }
 
   function buildCurlCommand(method, path, queryParams, pathParams, body) {
+    // Resolve relative paths to full URLs using the API base URL
     var url = path;
+    if (url && /^\//.test(url)) {
+      var base = resolveApiBaseUrl(DocBuddy._cachedOpenapiSchema);
+      if (base) {
+        url = base.replace(/\/+$/, '') + url;
+      }
+    }
     if (queryParams && Object.keys(queryParams).length > 0) {
       var qs = Object.keys(queryParams).map(function(k) {
         return encodeURIComponent(k) + '=' + encodeURIComponent(queryParams[k]);
