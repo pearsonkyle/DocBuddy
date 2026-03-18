@@ -420,7 +420,7 @@
             var method = args.method || 'GET';
             var url = args.path || '';
 
-            try { url = decodeURIComponent(url); } catch (e) {}
+            try { url = decodeURIComponent(url); } catch (e) { console.warn('Failed to decode URL component:', e); }
             if (!url || !/^\//.test(url)) {
               callback('Error: Tool call path must be a relative URL starting with /');
               return;

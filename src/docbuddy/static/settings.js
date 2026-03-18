@@ -6,13 +6,13 @@
 
   var DB = window.DocBuddy;
 
-  // ── LLMSettingsPanel component ───────────────────────────────────────────────
-  function LLMSettingsPanelFactory(system) {
+  // ── SettingsPanel component ───────────────────────────────────────────────
+  function SettingsPanelFactory(system) {
     var React = system.React;
 
     var SystemPromptPresetSelector = DB.createSystemPromptPresetSelector(React);
 
-    return class LLMSettingsPanel extends React.Component {
+    return class SettingsPanel extends React.Component {
       constructor(props) {
         super(props);
         var s = DB.loadFromStorage();
@@ -738,6 +738,6 @@
     };
   }
 
-  DB.LLMSettingsPanelFactory = LLMSettingsPanelFactory;
+  DB.SettingsPanelFactory = SettingsPanelFactory;
 
 })();

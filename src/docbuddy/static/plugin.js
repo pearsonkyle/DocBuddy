@@ -44,7 +44,7 @@
 
     function LLMDocsLayout(props) {
       var BaseLayout = system.getComponent("BaseLayout", true);
-      var LLMSettingsPanel = system.getComponent("LLMSettingsPanel", true);
+      var SettingsPanel = system.getComponent("SettingsPanel", true);
       var ChatPanel = system.getComponent("ChatPanel", true);
       var WorkflowPanel = system.getComponent("WorkflowPanel", true);
       var AgentPanel = system.getComponent("AgentPanel", true);
@@ -284,7 +284,7 @@
 
           // LLM Settings tab content (always mounted, hidden via CSS to preserve state across tab switches)
           React.createElement("div", { style: { display: activeTab === "settings" ? "block" : "none", height: "100%", overflow: "auto" } },
-            React.createElement(ErrorBoundary, null, React.createElement(LLMSettingsPanel, null))
+            React.createElement(ErrorBoundary, null, React.createElement(SettingsPanel, null))
           )
         )
       );
@@ -299,7 +299,7 @@
         },
       },
       components: {
-        LLMSettingsPanel: DB.LLMSettingsPanelFactory(system),
+        SettingsPanel: DB.SettingsPanelFactory(system),
         ChatPanel: DB.ChatPanelFactory(system),
         WorkflowPanel: DB.WorkflowPanelFactory(system),
         AgentPanel: DB.AgentPanelFactory(system),

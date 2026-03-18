@@ -2,6 +2,8 @@
 
 import threading
 import weakref
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as get_version
 from pathlib import Path
 from typing import Optional
 
@@ -53,17 +55,16 @@ def get_swagger_ui_html(
         swagger_css_sri: SRI hash for the Swagger UI CSS.
         theme_css_url: URL for the theme CSS file.
         debug: If True, disables template caching for development.
+        version: Version string to display in the UI (defaults to the installed
+            package version).
     """
-    env = _jinja_env
-
-    # Disable cache if in debug mode
-    if debug:
-        env.auto_reload = True
-        if env.cache is not None:
-            env.cache.clear()
-
-    # Import version here to avoid circular import with __init__.py
-    from importlib.metadata import version as get_version, PackageNotFoundError
+    # Use a fresh (uncached) environment per debug call to avoid mutating the
+    # shared singleton; non-debug requests share the cached module-level env.
+    env = (
+        Environment(loader=FileSystemLoader(str(_TEMPLATES_DIR)), autoescape=True)
+        if debug
+        else _jinja_env
+    )
 
     try:
         pkg_version = get_version("docbuddy")
@@ -96,6 +97,7 @@ def setup_docs(
     swagger_css_sri: str = "sha384-rcbEi6xgdPk0iWkAQzT2F3FeBJXdG+ydrawGlfHAFIZG7wU6aKbQaRewysYpmrlW",
     theme_css_url: str = "/docbuddy-static/themes/light-theme.css",
     debug: bool = False,
+    version: Optional[str] = None,
 ) -> None:
     """Mount the LLM-enhanced Swagger UI docs on a FastAPI application.
 
@@ -104,6 +106,9 @@ def setup_docs(
     2. Mounts the package's static JS files at ``/docbuddy-static``.
     3. Registers a new ``docs_url`` route that serves the custom Swagger UI page
        with the LLM settings panel injected.
+
+    Calling this function more than once on the same app instance is a no-op;
+    subsequent calls are silently ignored.
 
     Args:
         app: The FastAPI application instance.
@@ -114,43 +119,36 @@ def setup_docs(
         swagger_css_url: CDN URL for the Swagger UI CSS.
         swagger_js_sri: SRI hash for the Swagger UI JS bundle.
         swagger_css_sri: SRI hash for the Swagger UI CSS.
+        theme_css_url: URL for the theme CSS file (defaults to the bundled light theme).
         debug: If True, enables debug mode with template auto-reload (default False).
+        version: Version string to display in the UI (defaults to the installed
+            package version).
     """
     resolved_title = title or f"{app.title} – LLM Docs"
     resolved_openapi_url = openapi_url or app.openapi_url or "/openapi.json"
 
-    # Use thread lock for route modification to avoid race conditions
     with _route_lock:
-        # Check if this app already has LLM docs setup to avoid duplicates
         if app in _llm_apps:
             return
 
-        # Safely remove any existing docs/redoc routes registered by FastAPI
-
-        # Filter routes while avoiding concurrent modification issues
         original_routes = list(app.router.routes)
 
-        # Build set of paths to remove - handle potential None values
         paths_to_remove = {docs_url}
         if app.docs_url:
             paths_to_remove.add(app.docs_url)
         if app.redoc_url:
             paths_to_remove.add(app.redoc_url)
 
-        # Filter routes more safely to avoid issues with different route types
         new_routes = []
         for r in original_routes:
-            if isinstance(r, Route):
-                # Only remove routes with exact path matches
-                if r.path in paths_to_remove:
-                    continue
+            if isinstance(r, Route) and r.path in paths_to_remove:
+                continue
             new_routes.append(r)
 
         app.router.routes = new_routes
         app.docs_url = None
         app.redoc_url = None
 
-        # Mount static files for the plugin JS inside the lock to prevent TOCTOU race
         already_mounted = any(
             getattr(r, "name", None) == "docbuddy-static" for r in app.router.routes
         )
@@ -161,12 +159,10 @@ def setup_docs(
                 name="docbuddy-static",
             )
 
-        # Mark this app as having LLM docs setup
         _llm_apps.add(app)
 
-    # Register the custom docs route
     @app.get(docs_url, include_in_schema=False)
-    async def custom_docs() -> HTMLResponse:
+    def custom_docs() -> HTMLResponse:
         return get_swagger_ui_html(
             openapi_url=resolved_openapi_url,
             title=resolved_title,
@@ -176,4 +172,5 @@ def setup_docs(
             swagger_css_sri=swagger_css_sri,
             theme_css_url=theme_css_url,
             debug=debug,
+            version=version,
         )
