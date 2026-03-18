@@ -9,6 +9,9 @@
   // Configurable base path for static assets (allows standalone/GitHub Pages usage)
   var STATIC_BASE = window.DOCBUDDY_STATIC_BASE || '/docbuddy-static';
 
+  // Single source of truth for standalone/GitHub Pages mode detection
+  var IS_STANDALONE = (window.DOCBUDDY_VERSION === 'standalone');
+
   // ── Default System Prompt Preset Configuration (inline fallback) ──────────
   var DEFAULT_SYSTEM_PROMPT_CONFIG = {
     presets: {
@@ -36,7 +39,7 @@
     if (_systemPromptConfigFailed) return DEFAULT_SYSTEM_PROMPT_CONFIG;
 
     // In standalone/GitHub Pages mode, skip the fetch — inline defaults are canonical
-    if (window.DOCBUDDY_VERSION === 'standalone') {
+    if (IS_STANDALONE) {
       SYSTEM_PROMPT_CONFIG = DEFAULT_SYSTEM_PROMPT_CONFIG;
       _systemPromptConfigPromise = Promise.resolve(SYSTEM_PROMPT_CONFIG);
       return SYSTEM_PROMPT_CONFIG;
@@ -137,7 +140,7 @@
     // Schema-based URL detection only makes sense for standalone/GitHub Pages mode
     // where the page is served from a different host than the target API.
     // Step 4: Same-origin deployment fallback (checked early to preserve original behavior)
-    if (window.DOCBUDDY_VERSION !== 'standalone') {
+    if (!IS_STANDALONE) {
       var sameOriginBase = window.location.origin.replace(/\/+$/, '');
       console.debug('[API Base URL] Step 4 - Same-origin deployment, using page origin:', sameOriginBase);
       return sameOriginBase;
@@ -207,7 +210,7 @@
     // Step 4: Context-aware fallback
     // For pip-installed / docbuddy CLI deployments, window.location.origin IS the API server.
     // For GitHub Pages / standalone, window.location.origin is the hosting site, NOT the API.
-    if (window.DOCBUDDY_VERSION === 'standalone') {
+    if (IS_STANDALONE) {
       // Last resort for standalone: try the raw DOCBUDDY_OPENAPI_URL origin
       var openapiUrl = window.DOCBUDDY_OPENAPI_URL || '';
       if (openapiUrl.startsWith('http://') || openapiUrl.startsWith('https://')) {
@@ -269,7 +272,7 @@
       if (defaultConfig.api_assistant) {
         preset = defaultConfig.api_assistant;
       } else {
-        return buildDefaultSystemPrompt(openapiSchema);
+        return DEFAULT_SYSTEM_PROMPT_CONFIG.presets.api_assistant.prompt || '';
       }
     }
 
@@ -283,75 +286,6 @@
     return prompt;
   }
   DocBuddy.getSystemPromptForPreset = getSystemPromptForPreset;
-
-  // ── Default system prompt builder (fallback) ──────────────────────────────
-  function buildDefaultSystemPrompt(schema) {
-    var lines = [];
-    lines.push('You are a helpful API assistant. The user is looking at an API documentation page for an OpenAPI-compliant REST API.\n\n{openapi_context}');
-
-    lines.push('You can help the user understand endpoints, generate curl commands, explain request/response formats, and provide usage examples. You also have access to the `api_request` tool to execute API calls. When the user asks you to call an endpoint, use the tool instead of just showing a curl command. If a tool call returns an error, you may retry with corrected parameters.');
-
-    lines.push('## Tool Calling Instructions\n\n' +
-      'You have access to a tool called `api_request` that allows you to execute HTTP requests against the API. Use this tool when:\n\n' +
-      '- The user asks you to test an endpoint\n' +
-      '- The user wants to see data from the API\n' +
-      '- You need to verify how an endpoint works\n' +
-      '- Any situation where executing a real API call is helpful\n\n' +
-      '### Tool Call Format\n\n' +
-      'When using the `api_request` tool, respond with a JSON object containing your tool call:\n\n' +
-      '```json\n' +
-      '{\n' +
-      '  "tool_calls": [\n' +
-      '    {\n' +
-      '      "id": "call_123",\n' +
-      '      "type": "function",\n' +
-      '      "function": {\n' +
-      '        "name": "api_request",\n' +
-      '        "arguments": {\n' +
-      '          "method": "GET",\n' +
-      '          "path": "/users/{id}",\n' +
-      '          "query_params": {\n' +
-      '            "limit": "10"\n' +
-      '          },\n' +
-      '          "path_params": {\n' +
-      '            "id": "123"\n' +
-      '          }\n' +
-      '        }\n' +
-      '      }\n' +
-      '    }\n' +
-      '  ]\n' +
-      '}\n' +
-      '```\n\n' +
-      '### Tool Arguments Reference\n\n' +
-      '| Argument | Type | Description |\n' +
-      '|----------|------|-------------|\n' +
-      '| `method` | string | HTTP method: GET, POST, PUT, PATCH, DELETE |\n' +
-      '| `path` | string | API endpoint path (e.g., `/users`, `/users/{id}`) |\n' +
-      '| `query_params` | object | Query string parameters as key-value pairs |\n' +
-      '| `path_params` | object | Path template parameters to substitute |\n' +
-      '| `body` | object | JSON request body (for POST/PUT/PATCH) |\n\n' +
-      '### Important Guidelines\n\n' +
-      '1. **Always use the tool** when appropriate - don\'t just explain how to make the request\n' +
-      '2. **Fill in path parameters** before using `path` (e.g., `/users/123` instead of `/users/{id}`)\n' +
-      '3. **Set the correct HTTP method** - GET for reading, POST/PUT/PATCH for creating/updating\n' +
-      '4. **Provide all required arguments** - method and path are always required\n' +
-      '5. **Don\'t include Authorization header** - the system handles authentication\n' +
-      '6. **Use query_params for filters, pagination, sorting** - don\'t put these in the path\n' +
-      '7. **Include body only for POST/PUT/PATCH requests** - not for GET/DELETE\n' +
-      '8. **If unsure about path parameters**, ask the user or use placeholder values\n' +
-      '9. **Tool call will be automatically executed** by the system after you send it\n' +
-      '10. **Review tool results carefully** - if there\'s an error, correct the parameters and try again');
-
-    var prompt = lines.join('\n\n');
-
-    // Replace {openapi_context} placeholder with actual schema context
-    if (schema && prompt.includes('{openapi_context}')) {
-      var ctx = buildOpenApiContext(schema);
-      prompt = prompt.replace('{openapi_context}', '\n\n' + ctx + '\n');
-    }
-
-    return prompt;
-  }
 
   // ── LLM Provider configurations ─────────────────────────────────────────────
   var LLM_PROVIDERS = {
@@ -1022,7 +956,7 @@
   document.addEventListener('DOMContentLoaded', function() {
     window.applyLLMTheme(storedTheme.theme, storedTheme.customColors);
     // Skip eager prefetch on standalone page — URL isn't known until user clicks Load
-    if (window.DOCBUDDY_VERSION !== 'standalone') {
+    if (!IS_STANDALONE) {
       ensureOpenapiSchemaCached();
     }
   });
@@ -1276,7 +1210,7 @@
           if (preset) {
             displayText = preset.prompt || '';
           } else {
-            displayText = buildDefaultSystemPrompt(null);
+            displayText = DEFAULT_SYSTEM_PROMPT_CONFIG.presets.api_assistant.prompt || '';
           }
         }
 
@@ -1717,5 +1651,113 @@
 
   // Eagerly load system prompt config at module init (before DOMContentLoaded)
   loadSystemPromptConfig();
+
+  // ── Shared SSE streaming helper ───────────────────────────────────────────
+  // Handles the fetch + SSE parse loop so chat.js and agent.js share one
+  // implementation. Callbacks let each panel wire its own state updates.
+  //
+  // callbacks:
+  //   onContent(delta, accumulated)   — new content token arrived
+  //   onToolCalls(toolCallsList)      — finish_reason === "tool_calls"
+  //   onDone(accumulated)             — stream finished normally
+  //   onAbort(accumulated)            — AbortController fired
+  //   onNetworkError(err, accumulated)— fetch / HTTP error
+  //   onChunkError(err, raw)          — JSON parse error on SSE chunk (optional)
+  DocBuddy.streamLLMCompletion = function(url, payload, headers, signal, callbacks) {
+    var accumulated = '';
+    var accumulatedToolCalls = {};
+
+    fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(payload), signal: signal })
+      .then(function(res) {
+        if (!res.ok) {
+          return res.text().then(function(text) {
+            throw new Error('HTTP ' + res.status + ': ' + res.statusText + (text ? ' - ' + text : ''));
+          });
+        }
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+
+        var processChunk = function() {
+          return reader.read().then(function(result) {
+            if (signal && signal.aborted) {
+              callbacks.onAbort(accumulated);
+              return;
+            }
+            if (result.done) {
+              callbacks.onDone(accumulated || "Sorry, I couldn't get a response.");
+              return;
+            }
+
+            buffer += decoder.decode(result.value, { stream: true });
+            var lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (var i = 0; i < lines.length; i++) {
+              var line = lines[i].trim();
+              if (!line || !line.startsWith('data: ')) continue;
+              var payloadData = line.substring(6);
+
+              if (payloadData === '[DONE]') {
+                callbacks.onDone(accumulated || "Sorry, I couldn't get a response.");
+                return;
+              }
+
+              try {
+                var chunk = JSON.parse(payloadData);
+                if (chunk.error) {
+                  callbacks.onNetworkError(
+                    new Error(chunk.error + (chunk.details ? ': ' + chunk.details : '')),
+                    accumulated
+                  );
+                  return;
+                }
+
+                var choice = chunk.choices && chunk.choices[0];
+                if (!choice) continue;
+
+                if (choice.delta && choice.delta.content) {
+                  accumulated += choice.delta.content;
+                  callbacks.onContent(choice.delta.content, accumulated);
+                }
+
+                if (choice.delta && choice.delta.tool_calls) {
+                  choice.delta.tool_calls.forEach(function(tc) {
+                    var idx = tc.index != null ? tc.index : 0;
+                    if (!accumulatedToolCalls[idx]) {
+                      accumulatedToolCalls[idx] = { id: '', function: { name: '', arguments: '' } };
+                    }
+                    if (tc.id) accumulatedToolCalls[idx].id = tc.id;
+                    if (tc.function) {
+                      if (tc.function.name) accumulatedToolCalls[idx].function.name = tc.function.name;
+                      if (tc.function.arguments) accumulatedToolCalls[idx].function.arguments += tc.function.arguments;
+                    }
+                  });
+                }
+
+                if (choice.finish_reason === 'tool_calls') {
+                  var toolCallsList = Object.keys(accumulatedToolCalls).map(function(k) {
+                    return accumulatedToolCalls[k];
+                  });
+                  if (toolCallsList.length > 0) {
+                    callbacks.onToolCalls(toolCallsList);
+                    return;
+                  }
+                }
+              } catch (e) {
+                if (callbacks.onChunkError) callbacks.onChunkError(e, payloadData);
+              }
+            }
+
+            return processChunk();
+          });
+        };
+
+        return processChunk();
+      })
+      .catch(function(err) {
+        callbacks.onNetworkError(err, accumulated);
+      });
+  };
 
 })();

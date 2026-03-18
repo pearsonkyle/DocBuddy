@@ -441,12 +441,9 @@
         self.setState({ isTyping: true });
         window.dispatchEvent(new CustomEvent('docbuddy-chat-streaming', { detail: { streaming: true } }));
 
-        var accumulated = "";
         var currentStreamMessageId = streamMsgId;
 
         var lastResponseText = "";
-
-        var accumulatedToolCalls = {};
 
         var finalize = function(content, saveContent, isError) {
           if (saveContent && content && content.trim() && content !== "*(cancelled)*") {
@@ -495,162 +492,83 @@
 
         var baseUrl = (settings.baseUrl || "").replace(/\/+$/, "");
 
-        fetch(baseUrl + "/chat/completions", {
-          method: "POST",
-          headers: fetchHeaders,
-          body: JSON.stringify(payload),
-          signal: self._currentCancelToken.signal
-        })
-          .then(function (res) {
-            if (!res.ok) {
-              return res.text().then(function(text) {
-                throw new Error("HTTP " + res.status + ": " + res.statusText + (text ? " - " + text : ""));
+        DB.streamLLMCompletion(
+          baseUrl + "/chat/completions",
+          payload,
+          fetchHeaders,
+          self._currentCancelToken.signal,
+          {
+            onContent: function(delta, accum) {
+              self.setState(function(prev) {
+                var history = prev.chatHistory || [];
+                if (history.length > 0 && history[history.length - 1].role === 'assistant' &&
+                    history[history.length - 1].messageId === currentStreamMessageId) {
+                  var updated = history.slice(0, -1).concat([{
+                    role: 'assistant',
+                    content: accum,
+                    messageId: history[history.length - 1].messageId
+                  }]);
+                  self._debouncedSaveChatHistory(updated);
+                  return { chatHistory: updated };
+                }
+                return {};
               });
-            }
-            var reader = res.body.getReader();
-            var decoder = new TextDecoder();
-            var buffer = "";
+              scrollToBottom();
+            },
+            onToolCalls: function(toolCallsList) {
+              var tc = toolCallsList[0];
+              var args = {};
+              try { args = JSON.parse(tc.function.arguments || '{}'); } catch (e) { args = {}; }
 
-            var processChunk = function() {
-              return reader.read().then(function (result) {
-                if (self._currentCancelToken && self._currentCancelToken.signal.aborted) {
-                  finalize(accumulated, true);
-                  return;
-                }
-                if (result.done) {
-                  finalize(accumulated || "Sorry, I couldn't get a response.", true);
-                  return;
-                }
+              var assistantToolMsg = {
+                role: 'assistant',
+                content: null,
+                tool_calls: toolCallsList.map(function(t) {
+                  return { id: t.id, type: 'function', function: { name: t.function.name, arguments: t.function.arguments } };
+                }),
+                messageId: streamMsgId
+              };
+              self._pendingToolCallMsg = assistantToolMsg;
 
-                buffer += decoder.decode(result.value, { stream: true });
-                var lines = buffer.split("\n");
-                buffer = lines.pop() || "";
-
-                for (var i = 0; i < lines.length; i++) {
-                  var line = lines[i].trim();
-                  if (!line || !line.startsWith("data: ")) continue;
-                  var payloadData = line.substring(6);
-
-                  if (payloadData === "[DONE]") {
-                    finalize(accumulated || "Sorry, I couldn't get a response.", true);
-                    return;
-                  }
-
-                  try {
-                    var chunk = JSON.parse(payloadData);
-                    if (chunk.error) {
-                      finalize("Error: " + chunk.error + (chunk.details ? ": " + chunk.details : ""), true, true);
-                      return;
-                    }
-
-                    var choice = chunk.choices && chunk.choices[0];
-                    if (!choice) continue;
-
-                    if (choice.delta && choice.delta.content) {
-                      accumulated += choice.delta.content;
-                      self.setState(function (prev) {
-                        var history = prev.chatHistory || [];
-                        if (history.length > 0 && history[history.length - 1].role === 'assistant' &&
-                            history[history.length - 1].messageId === currentStreamMessageId) {
-                          var updated = history.slice(0, -1).concat([{
-                            role: 'assistant',
-                            content: accumulated,
-                            messageId: history[history.length - 1].messageId
-                          }]);
-                          self._debouncedSaveChatHistory(updated);
-                          return { chatHistory: updated };
-                        }
-                        return {};
-                      });
-                      scrollToBottom();
-                    }
-
-                    if (choice.delta && choice.delta.tool_calls) {
-                      choice.delta.tool_calls.forEach(function(tc) {
-                        var idx = tc.index != null ? tc.index : 0;
-                        if (!accumulatedToolCalls[idx]) {
-                          accumulatedToolCalls[idx] = { id: '', function: { name: '', arguments: '' } };
-                        }
-                        if (tc.id) accumulatedToolCalls[idx].id = tc.id;
-                        if (tc.function) {
-                          if (tc.function.name) accumulatedToolCalls[idx].function.name = tc.function.name;
-                          if (tc.function.arguments) accumulatedToolCalls[idx].function.arguments += tc.function.arguments;
-                        }
-                      });
-                    }
-
-                    if (choice.finish_reason === "tool_calls") {
-                      var toolCallsList = Object.keys(accumulatedToolCalls).map(function(k) {
-                        return accumulatedToolCalls[k];
-                      });
-
-                      if (toolCallsList.length > 0) {
-                        var tc = toolCallsList[0];
-                        var args = {};
-                        try {
-                          args = JSON.parse(tc.function.arguments || '{}');
-                        } catch (e) {
-                          args = {};
-                        }
-
-                        var assistantToolMsg = {
-                          role: 'assistant',
-                          content: null,
-                          tool_calls: toolCallsList.map(function(t) {
-                            return { id: t.id, type: 'function', function: { name: t.function.name, arguments: t.function.arguments } };
-                          }),
-                          messageId: streamMsgId
-                        };
-                        self._pendingToolCallMsg = assistantToolMsg;
-
-                        self.setState(function(prev) {
-                          var history = (prev.chatHistory || []).filter(function(m) {
-                            return m.messageId !== streamMsgId;
-                          });
-                          DB.saveChatHistory(history);
-                          return { chatHistory: history };
-                        });
-
-                        self.setState({
-                          isTyping: false,
-                          pendingToolCall: tc,
-                          editMethod: args.method || 'GET',
-                          editPath: args.path || '',
-                          editQueryParams: JSON.stringify(args.query_params || {}, null, 2),
-                          editPathParams: JSON.stringify(args.path_params || {}, null, 2),
-                          editBody: JSON.stringify(args.body || {}, null, 2),
-                          toolCallResponse: null,
-                        }, function() {
-                          if (toolSettings.autoExecute) {
-                            self.handleExecuteToolCall();
-                          }
-                        });
-                        window.dispatchEvent(new CustomEvent('docbuddy-chat-streaming', { detail: { streaming: false } }));
-                        self._currentCancelToken = null;
-
-                        return;
-                      }
-                    }
-                  } catch (e) {
-                    if (typeof console !== 'undefined' && console && typeof console.error === 'function') {
-                      console.error('Error processing streaming chunk:', payloadData, e);
-                    }
-                  }
-                }
-
-                return processChunk();
+              self.setState(function(prev) {
+                var history = (prev.chatHistory || []).filter(function(m) {
+                  return m.messageId !== streamMsgId;
+                });
+                DB.saveChatHistory(history);
+                return { chatHistory: history };
               });
-            };
 
-            return processChunk();
-          })
-          .catch(function (err) {
-            if (err.name === 'AbortError') {
-              finalize(accumulated, true);
-            } else {
-              finalize("Error: " + (err.message || "Request failed"), true, true);
+              self.setState({
+                isTyping: false,
+                pendingToolCall: tc,
+                editMethod: args.method || 'GET',
+                editPath: args.path || '',
+                editQueryParams: JSON.stringify(args.query_params || {}, null, 2),
+                editPathParams: JSON.stringify(args.path_params || {}, null, 2),
+                editBody: JSON.stringify(args.body || {}, null, 2),
+                toolCallResponse: null,
+              }, function() {
+                if (toolSettings.autoExecute) { self.handleExecuteToolCall(); }
+              });
+              window.dispatchEvent(new CustomEvent('docbuddy-chat-streaming', { detail: { streaming: false } }));
+              self._currentCancelToken = null;
+            },
+            onDone: function(accum) { finalize(accum, true); },
+            onAbort: function(accum) { finalize(accum, true); },
+            onNetworkError: function(err, accum) {
+              if (err.name === 'AbortError') {
+                finalize(accum, true);
+              } else {
+                finalize("Error: " + (err.message || "Request failed"), true, true);
+              }
+            },
+            onChunkError: function(e, data) {
+              if (typeof console !== 'undefined' && console && typeof console.error === 'function') {
+                console.error('Error processing streaming chunk:', data, e);
+              }
             }
-          });
+          }
+        );
 
         setTimeout(scrollToBottom, 50);
       }

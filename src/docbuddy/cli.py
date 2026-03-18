@@ -16,7 +16,7 @@ def _pkg_dir() -> pathlib.Path:
     return pathlib.Path(__file__).parent
 
 
-def main():
+def main() -> None:
     """Launch DocBuddy standalone webpage on port 8008."""
     parser = argparse.ArgumentParser(
         prog="docbuddy",

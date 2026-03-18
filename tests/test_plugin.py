@@ -433,7 +433,7 @@ def test_settings_panel_included():
 
     js_content = get_all_plugin_js(client)
 
-    assert "LLMSettingsPanel" in js_content
+    assert "SettingsPanel" in js_content
 
 
 def test_settings_panel_fields():
