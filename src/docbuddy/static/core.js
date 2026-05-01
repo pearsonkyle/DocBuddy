@@ -1442,7 +1442,12 @@
     return history.map(function(m) {
       var msg = { role: m.role };
       if (m.content != null) msg.content = m.content;
-      if (m.tool_calls) msg.tool_calls = m.tool_calls;
+      if (m.tool_calls) {
+        msg.tool_calls = m.tool_calls;
+        // OpenAI spec requires content: null (not absent) on assistant tool_call messages.
+        // Omitting it causes errors with some providers when replaying the history.
+        if (!('content' in msg)) msg.content = null;
+      }
       if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
       if (!m.tool_calls && msg.content == null) msg.content = m._displayContent || '';
       return msg;

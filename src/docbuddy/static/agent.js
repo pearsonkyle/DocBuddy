@@ -559,6 +559,10 @@
                 tool_calls: toolCallsList.map(function(t) {
                   return { id: t.id, type: 'function', function: { name: t.function.name, arguments: t.function.arguments } };
                 }),
+                // Pre-populate display fields so the curl command and method/path
+                // badge render correctly before the user edits or executes the call.
+                _toolArgs: args,
+                _displayContent: 'Tool call: api_request(' + (args.method || 'GET') + ' ' + (args.path || '') + ')',
                 messageId: streamMsgId
               };
 
